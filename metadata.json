@@ -1,0 +1,6 @@
+{
+  "name": "Attendance Tracker",
+  "description": "Personal attendance management system featuring user registration, secure authentication, attendance logging form, full CRUD record management, and history dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
