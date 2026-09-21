@@ -1,36 +1,146 @@
-import { AttendanceFormData, AttendanceRecord, AttendanceStats, ShiftType, User, UserRecord, WorkLocation } from './types';
+import {
+  AttendanceStatus,
+  ClassAttendanceSession,
+  Student,
+  StudentAttendanceItem,
+  StudentAttendanceSummary,
+  User,
+  UserRecord,
+  UserRole,
+} from './types';
 
-const USERS_STORAGE_KEY = 'attendance_app_users_v1';
-const SESSION_STORAGE_KEY = 'attendance_app_current_session_v1';
-const RECORDS_STORAGE_KEY = 'attendance_app_records_v1';
+const USERS_KEY = 'class_attendance_users_v2';
+const SESSION_KEY = 'class_attendance_session_v2';
+const STUDENTS_KEY = 'class_attendance_students_v2';
+const ATTENDANCE_SESSIONS_KEY = 'class_attendance_records_v2';
 
-export function calculateHours(timeIn: string, timeOut: string | null): number | null {
-  if (!timeIn || !timeOut) return null;
-  const [inH, inM] = timeIn.split(':').map(Number);
-  const [outH, outM] = timeOut.split(':').map(Number);
-  if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return null;
+export const DEFAULT_SECTION = 'Grade 10 - Diamond';
 
-  let startMinutes = inH * 60 + inM;
-  let endMinutes = outH * 60 + outM;
+// Default Student Roster
+const INITIAL_STUDENTS: Student[] = [
+  { id: 'std_01', studentNumber: '2026-001', name: 'Althea Reyes', gender: 'Female', gradeSection: DEFAULT_SECTION, email: 'althea@school.edu' },
+  { id: 'std_02', studentNumber: '2026-002', name: 'Benjamin Cruz', gender: 'Male', gradeSection: DEFAULT_SECTION, email: 'benjamin@school.edu' },
+  { id: 'std_03', studentNumber: '2026-003', name: 'Chloe Mendoza', gender: 'Female', gradeSection: DEFAULT_SECTION, email: 'chloe@school.edu' },
+  { id: 'std_04', studentNumber: '2026-004', name: 'Daniel Bautista', gender: 'Male', gradeSection: DEFAULT_SECTION, email: 'daniel@school.edu' },
+  { id: 'std_05', studentNumber: '2026-005', name: 'Elijah Garcia', gender: 'Male', gradeSection: DEFAULT_SECTION, email: 'elijah@school.edu' },
+  { id: 'std_06', studentNumber: '2026-006', name: 'Fatima Santos', gender: 'Female', gradeSection: DEFAULT_SECTION, email: 'fatima@school.edu' },
+  { id: 'std_07', studentNumber: '2026-007', name: 'Gabriel Tan', gender: 'Male', gradeSection: DEFAULT_SECTION, email: 'gabriel@school.edu' },
+  { id: 'std_08', studentNumber: '2026-008', name: 'Hannah Ramos', gender: 'Female', gradeSection: DEFAULT_SECTION, email: 'hannah@school.edu' },
+  { id: 'std_09', studentNumber: '2026-009', name: 'Isaac Morales', gender: 'Male', gradeSection: DEFAULT_SECTION, email: 'isaac@school.edu' },
+  { id: 'std_10', studentNumber: '2026-010', name: 'Jasmine Navarro', gender: 'Female', gradeSection: DEFAULT_SECTION, email: 'jasmine@school.edu' },
+  { id: 'std_11', studentNumber: '2026-011', name: 'Kyle Dela Cruz', gender: 'Male', gradeSection: DEFAULT_SECTION, email: 'kyle@school.edu' },
+  { id: 'std_12', studentNumber: '2026-012', name: 'Liam Santos', gender: 'Male', gradeSection: DEFAULT_SECTION, email: 'liam@school.edu' },
+  { id: 'std_13', studentNumber: '2026-013', name: 'Mia Fernandez', gender: 'Female', gradeSection: DEFAULT_SECTION, email: 'mia@school.edu' },
+  { id: 'std_14', studentNumber: '2026-014', name: 'Noah Villanueva', gender: 'Male', gradeSection: DEFAULT_SECTION, email: 'noah@school.edu' },
+  { id: 'std_15', studentNumber: '2026-015', name: 'Olivia Perez', gender: 'Female', gradeSection: DEFAULT_SECTION, email: 'olivia@school.edu' },
+];
 
-  // Handle overnight shift if any
-  if (endMinutes < startMinutes) {
-    endMinutes += 24 * 60;
+// Initial Users
+const INITIAL_USERS: UserRecord[] = [
+  {
+    id: 'usr_president_01',
+    name: 'Jovin Anunciado',
+    email: 'jovinanunciado@gmail.com',
+    studentId: 'PRES-2026-01',
+    role: 'class_president',
+    gradeSection: DEFAULT_SECTION,
+    avatarColor: 'bg-emerald-600',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    passwordHash: 'password123',
+  },
+  {
+    id: 'usr_student_01',
+    name: 'Liam Santos',
+    email: 'liam@school.edu',
+    studentId: '2026-012',
+    role: 'student',
+    gradeSection: DEFAULT_SECTION,
+    avatarColor: 'bg-blue-600',
+    createdAt: '2026-09-02T08:00:00.000Z',
+    passwordHash: 'student123',
+  },
+];
+
+// Initial Attendance Records
+const INITIAL_SESSIONS: ClassAttendanceSession[] = [
+  {
+    id: 'session_20260918',
+    date: '2026-09-18',
+    gradeSection: DEFAULT_SECTION,
+    sessionType: 'Morning Roll Call',
+    presidentId: 'usr_president_01',
+    presidentName: 'Jovin Anunciado (Class President)',
+    totalStudents: 15,
+    presentCount: 14,
+    absentCount: 1,
+    attendanceRate: 93,
+    notes: 'Benjamin Cruz absent due to flu with medical note submitted to adviser.',
+    createdAt: '2026-09-18T08:15:00.000Z',
+    updatedAt: '2026-09-18T08:15:00.000Z',
+    records: [
+      { studentId: 'std_01', studentNumber: '2026-001', studentName: 'Althea Reyes', gender: 'Female', status: 'present' },
+      { studentId: 'std_02', studentNumber: '2026-002', studentName: 'Benjamin Cruz', gender: 'Male', status: 'absent', remarks: 'Sick leave' },
+      { studentId: 'std_03', studentNumber: '2026-003', studentName: 'Chloe Mendoza', gender: 'Female', status: 'present' },
+      { studentId: 'std_04', studentNumber: '2026-004', studentName: 'Daniel Bautista', gender: 'Male', status: 'present' },
+      { studentId: 'std_05', studentNumber: '2026-005', studentName: 'Elijah Garcia', gender: 'Male', status: 'present' },
+      { studentId: 'std_06', studentNumber: '2026-006', studentName: 'Fatima Santos', gender: 'Female', status: 'present' },
+      { studentId: 'std_07', studentNumber: '2026-007', studentName: 'Gabriel Tan', gender: 'Male', status: 'present' },
+      { studentId: 'std_08', studentNumber: '2026-008', studentName: 'Hannah Ramos', gender: 'Female', status: 'present' },
+      { studentId: 'std_09', studentNumber: '2026-009', studentName: 'Isaac Morales', gender: 'Male', status: 'present' },
+      { studentId: 'std_10', studentNumber: '2026-010', studentName: 'Jasmine Navarro', gender: 'Female', status: 'present' },
+      { studentId: 'std_11', studentNumber: '2026-011', studentName: 'Kyle Dela Cruz', gender: 'Male', status: 'present' },
+      { studentId: 'std_12', studentNumber: '2026-012', studentName: 'Liam Santos', gender: 'Male', status: 'present' },
+      { studentId: 'std_13', studentNumber: '2026-013', studentName: 'Mia Fernandez', gender: 'Female', status: 'present' },
+      { studentId: 'std_14', studentNumber: '2026-014', studentName: 'Noah Villanueva', gender: 'Male', status: 'present' },
+      { studentId: 'std_15', studentNumber: '2026-015', studentName: 'Olivia Perez', gender: 'Female', status: 'present' },
+    ],
+  },
+  {
+    id: 'session_20260919',
+    date: '2026-09-19',
+    gradeSection: DEFAULT_SECTION,
+    sessionType: 'Morning Roll Call',
+    presidentId: 'usr_president_01',
+    presidentName: 'Jovin Anunciado (Class President)',
+    totalStudents: 15,
+    presentCount: 13,
+    absentCount: 2,
+    attendanceRate: 87,
+    notes: 'Gabriel Tan and Noah Villanueva absent.',
+    createdAt: '2026-09-19T08:12:00.000Z',
+    updatedAt: '2026-09-19T08:12:00.000Z',
+    records: [
+      { studentId: 'std_01', studentNumber: '2026-001', studentName: 'Althea Reyes', gender: 'Female', status: 'present' },
+      { studentId: 'std_02', studentNumber: '2026-002', studentName: 'Benjamin Cruz', gender: 'Male', status: 'present' },
+      { studentId: 'std_03', studentNumber: '2026-003', studentName: 'Chloe Mendoza', gender: 'Female', status: 'present' },
+      { studentId: 'std_04', studentNumber: '2026-004', studentName: 'Daniel Bautista', gender: 'Male', status: 'present' },
+      { studentId: 'std_05', studentNumber: '2026-005', studentName: 'Elijah Garcia', gender: 'Male', status: 'present' },
+      { studentId: 'std_06', studentNumber: '2026-006', studentName: 'Fatima Santos', gender: 'Female', status: 'present' },
+      { studentId: 'std_07', studentNumber: '2026-007', studentName: 'Gabriel Tan', gender: 'Male', status: 'absent', remarks: 'Unexcused' },
+      { studentId: 'std_08', studentNumber: '2026-008', studentName: 'Hannah Ramos', gender: 'Female', status: 'present' },
+      { studentId: 'std_09', studentNumber: '2026-009', studentName: 'Isaac Morales', gender: 'Male', status: 'present' },
+      { studentId: 'std_10', studentNumber: '2026-010', studentName: 'Jasmine Navarro', gender: 'Female', status: 'present' },
+      { studentId: 'std_11', studentNumber: '2026-011', studentName: 'Kyle Dela Cruz', gender: 'Male', status: 'present' },
+      { studentId: 'std_12', studentNumber: '2026-012', studentName: 'Liam Santos', gender: 'Male', status: 'present' },
+      { studentId: 'std_13', studentNumber: '2026-013', studentName: 'Mia Fernandez', gender: 'Female', status: 'present' },
+      { studentId: 'std_14', studentNumber: '2026-014', studentName: 'Noah Villanueva', gender: 'Male', status: 'absent', remarks: 'Family emergency' },
+      { studentId: 'std_15', studentNumber: '2026-015', studentName: 'Olivia Perez', gender: 'Female', status: 'present' },
+    ],
+  },
+];
+
+export function initializeStorage(): void {
+  if (typeof window === 'undefined') return;
+
+  if (!localStorage.getItem(USERS_KEY)) {
+    localStorage.setItem(USERS_KEY, JSON.stringify(INITIAL_USERS));
   }
-
-  const diffMinutes = endMinutes - startMinutes;
-  const hours = diffMinutes / 60;
-  return Math.round(hours * 10) / 10;
-}
-
-export function formatTime12h(time24: string | null): string {
-  if (!time24) return '--:--';
-  const [hStr, mStr] = time24.split(':');
-  const h = parseInt(hStr, 10);
-  if (isNaN(h)) return time24;
-  const period = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  return `${h12}:${mStr} ${period}`;
+  if (!localStorage.getItem(STUDENTS_KEY)) {
+    localStorage.setItem(STUDENTS_KEY, JSON.stringify(INITIAL_STUDENTS));
+  }
+  if (!localStorage.getItem(ATTENDANCE_SESSIONS_KEY)) {
+    localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify(INITIAL_SESSIONS));
+  }
 }
 
 export function getTodayDateString(): string {
@@ -43,129 +153,28 @@ export function getTodayDateString(): string {
 
 export function getCurrentTimeString(): string {
   const d = new Date();
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Initial Seed Data
-const INITIAL_DEMO_USER: UserRecord = {
-  id: 'usr_demo_01',
-  name: 'Jovin Anunciado',
-  email: 'jovinanunciado@gmail.com',
-  employeeId: 'EMP-7824',
-  department: 'Software Engineering',
-  role: 'Senior Developer',
-  avatarColor: 'bg-emerald-600',
-  createdAt: '2026-08-01T08:00:00.000Z',
-  passwordHash: 'password123',
-};
-
-const INITIAL_RECORDS: AttendanceRecord[] = [
-  {
-    id: 'att_01',
-    userId: 'usr_demo_01',
-    date: '2026-09-15',
-    timeIn: '08:55',
-    timeOut: '17:30',
-    status: 'present',
-    workLocation: 'office',
-    shift: 'morning',
-    notes: 'Sprint planning and reviewed code merges.',
-    totalHours: 8.6,
-    createdAt: '2026-09-15T08:55:00.000Z',
-    updatedAt: '2026-09-15T17:30:00.000Z',
-  },
-  {
-    id: 'att_02',
-    userId: 'usr_demo_01',
-    date: '2026-09-16',
-    timeIn: '09:02',
-    timeOut: '18:10',
-    status: 'present',
-    workLocation: 'remote',
-    shift: 'morning',
-    notes: 'Remote day: Worked on API authentication handlers and bugfixes.',
-    totalHours: 9.1,
-    createdAt: '2026-09-16T09:02:00.000Z',
-    updatedAt: '2026-09-16T18:10:00.000Z',
-  },
-  {
-    id: 'att_03',
-    userId: 'usr_demo_01',
-    date: '2026-09-17',
-    timeIn: '09:42',
-    timeOut: '18:00',
-    status: 'late',
-    workLocation: 'office',
-    shift: 'morning',
-    notes: 'Traffic delay on transit. Morning standup attended virtually.',
-    totalHours: 8.3,
-    createdAt: '2026-09-17T09:42:00.000Z',
-    updatedAt: '2026-09-17T18:00:00.000Z',
-  },
-  {
-    id: 'att_04',
-    userId: 'usr_demo_01',
-    date: '2026-09-18',
-    timeIn: '08:48',
-    timeOut: '17:45',
-    status: 'present',
-    workLocation: 'office',
-    shift: 'morning',
-    notes: 'Database schema update review and automated test suites.',
-    totalHours: 8.9,
-    createdAt: '2026-09-18T08:48:00.000Z',
-    updatedAt: '2026-09-18T17:45:00.000Z',
-  },
-  {
-    id: 'att_05',
-    userId: 'usr_demo_01',
-    date: '2026-09-19',
-    timeIn: '09:10',
-    timeOut: '14:00',
-    status: 'half_day',
-    workLocation: 'office',
-    shift: 'morning',
-    notes: 'Doctor appointment in the afternoon. Completed urgent PR reviews.',
-    totalHours: 4.8,
-    createdAt: '2026-09-19T09:10:00.000Z',
-    updatedAt: '2026-09-19T14:00:00.000Z',
-  },
-];
-
-export function initializeStorage(): void {
-  if (typeof window === 'undefined') return;
-
-  const existingUsers = localStorage.getItem(USERS_STORAGE_KEY);
-  if (!existingUsers) {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([INITIAL_DEMO_USER]));
-  }
-
-  const existingRecords = localStorage.getItem(RECORDS_STORAGE_KEY);
-  if (!existingRecords) {
-    localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(INITIAL_RECORDS));
-  }
-}
-
+// User & Auth Handlers
 export function getAllUsers(): UserRecord[] {
   initializeStorage();
   try {
-    const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [INITIAL_DEMO_USER];
+    const raw = localStorage.getItem(USERS_KEY);
+    return raw ? JSON.parse(raw) : INITIAL_USERS;
   } catch {
-    return [INITIAL_DEMO_USER];
+    return INITIAL_USERS;
   }
 }
 
 export function saveAllUsers(users: UserRecord[]): void {
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
 }
 
 export function getCurrentSession(): User | null {
   initializeStorage();
   try {
-    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = localStorage.getItem(SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -174,54 +183,43 @@ export function getCurrentSession(): User | null {
 
 export function setCurrentSession(user: User | null): void {
   if (!user) {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
+    localStorage.removeItem(SESSION_KEY);
   } else {
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
   }
 }
 
 export function registerUser(input: {
   name: string;
   email: string;
-  employeeId: string;
-  department: string;
-  role: string;
+  studentId: string;
+  role: UserRole;
+  gradeSection: string;
   password: string;
-  avatarColor?: string;
 }): { success: boolean; message: string; user?: User } {
   const users = getAllUsers();
-
   const cleanEmail = input.email.trim().toLowerCase();
-  const cleanEmpId = input.employeeId.trim().toUpperCase();
+  const cleanStudentId = input.studentId.trim().toUpperCase();
 
-  // Check email collision
   if (users.some((u) => u.email.toLowerCase() === cleanEmail)) {
     return { success: false, message: 'An account with this email already exists.' };
   }
 
-  // Check Employee ID collision
-  if (users.some((u) => u.employeeId.toUpperCase() === cleanEmpId)) {
-    return { success: false, message: 'This Employee / Student ID is already registered.' };
+  if (users.some((u) => u.studentId.toUpperCase() === cleanStudentId)) {
+    return { success: false, message: 'This Student/President ID is already registered.' };
   }
 
-  const avatarColors = [
-    'bg-emerald-600',
-    'bg-blue-600',
-    'bg-indigo-600',
-    'bg-teal-600',
-    'bg-violet-600',
-    'bg-rose-600',
-  ];
-  const color = input.avatarColor || avatarColors[Math.floor(Math.random() * avatarColors.length)];
+  const avatarColor =
+    input.role === 'class_president' ? 'bg-emerald-600' : 'bg-blue-600';
 
   const newUserRecord: UserRecord = {
     id: 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
     name: input.name.trim(),
     email: cleanEmail,
-    employeeId: cleanEmpId,
-    department: input.department.trim() || 'General',
-    role: input.role.trim() || 'Staff Member',
-    avatarColor: color,
+    studentId: cleanStudentId,
+    role: input.role,
+    gradeSection: input.gradeSection.trim() || DEFAULT_SECTION,
+    avatarColor,
     createdAt: new Date().toISOString(),
     passwordHash: input.password,
   };
@@ -229,11 +227,12 @@ export function registerUser(input: {
   users.push(newUserRecord);
   saveAllUsers(users);
 
-  // Strip password hash for user object
   const { passwordHash, ...safeUser } = newUserRecord;
   return {
     success: true,
-    message: 'Account registered successfully! You can now log in.',
+    message: `Account created successfully as ${
+      input.role === 'class_president' ? 'Class President' : 'Student'
+    }! Please log in.`,
     user: safeUser,
   };
 }
@@ -246,11 +245,11 @@ export function loginUser(
   const cleanId = identifier.trim().toLowerCase();
 
   const found = users.find(
-    (u) => u.email.toLowerCase() === cleanId || u.employeeId.toLowerCase() === cleanId
+    (u) => u.email.toLowerCase() === cleanId || u.studentId.toLowerCase() === cleanId
   );
 
   if (!found) {
-    return { success: false, message: 'No account found with this email or ID.' };
+    return { success: false, message: 'Account not found. Please check your Email or ID.' };
   }
 
   if (found.passwordHash !== password) {
@@ -259,286 +258,246 @@ export function loginUser(
 
   const { passwordHash, ...safeUser } = found;
   setCurrentSession(safeUser);
-  return { success: true, message: 'Logged in successfully!', user: safeUser };
+  return { success: true, message: 'Signed in successfully!', user: safeUser };
 }
 
 export function logoutUser(): void {
   setCurrentSession(null);
 }
 
-export function updateUserProfile(
-  userId: string,
-  updates: Partial<Omit<User, 'id' | 'createdAt'>> & { newPassword?: string }
-): { success: boolean; message: string; user?: User } {
-  const users = getAllUsers();
-  const index = users.findIndex((u) => u.id === userId);
-
-  if (index === -1) {
-    return { success: false, message: 'User not found.' };
-  }
-
-  // Check email conflict if changing
-  if (updates.email) {
-    const cleanEmail = updates.email.trim().toLowerCase();
-    const conflict = users.find((u) => u.id !== userId && u.email.toLowerCase() === cleanEmail);
-    if (conflict) {
-      return { success: false, message: 'Email address is already in use by another account.' };
-    }
-    users[index].email = cleanEmail;
-  }
-
-  // Check employee ID conflict
-  if (updates.employeeId) {
-    const cleanId = updates.employeeId.trim().toUpperCase();
-    const conflict = users.find(
-      (u) => u.id !== userId && u.employeeId.toUpperCase() === cleanId
-    );
-    if (conflict) {
-      return { success: false, message: 'Employee/Student ID is already in use.' };
-    }
-    users[index].employeeId = cleanId;
-  }
-
-  if (updates.name) users[index].name = updates.name.trim();
-  if (updates.department) users[index].department = updates.department.trim();
-  if (updates.role) users[index].role = updates.role.trim();
-  if (updates.avatarColor) users[index].avatarColor = updates.avatarColor;
-  if (updates.newPassword && updates.newPassword.trim().length >= 6) {
-    users[index].passwordHash = updates.newPassword.trim();
-  }
-
-  saveAllUsers(users);
-
-  const { passwordHash, ...safeUser } = users[index];
-  // Update session if it's the current user
-  const session = getCurrentSession();
-  if (session && session.id === userId) {
-    setCurrentSession(safeUser);
-  }
-
-  return { success: true, message: 'Profile updated successfully!', user: safeUser };
-}
-
-export function deleteUserAccount(userId: string): { success: boolean; message: string } {
-  let users = getAllUsers();
-  const userExists = users.some((u) => u.id === userId);
-  if (!userExists) {
-    return { success: false, message: 'User not found.' };
-  }
-
-  // Remove user
-  users = users.filter((u) => u.id !== userId);
-  saveAllUsers(users);
-
-  // Remove user's attendance records
-  let records = getAllAttendanceRecords();
-  records = records.filter((r) => r.userId !== userId);
-  saveAllAttendanceRecords(records);
-
-  // Clear session if current
-  const session = getCurrentSession();
-  if (session && session.id === userId) {
-    setCurrentSession(null);
-  }
-
-  return { success: true, message: 'Account and all associated records deleted.' };
-}
-
-// Attendance CRUD
-export function getAllAttendanceRecords(): AttendanceRecord[] {
+// Student Roster CRUD
+export function getAllStudents(): Student[] {
   initializeStorage();
   try {
-    const raw = localStorage.getItem(RECORDS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : INITIAL_RECORDS;
+    const raw = localStorage.getItem(STUDENTS_KEY);
+    return raw ? JSON.parse(raw) : INITIAL_STUDENTS;
   } catch {
-    return INITIAL_RECORDS;
+    return INITIAL_STUDENTS;
   }
 }
 
-export function saveAllAttendanceRecords(records: AttendanceRecord[]): void {
-  localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(records));
+export function saveAllStudents(students: Student[]): void {
+  localStorage.setItem(STUDENTS_KEY, JSON.stringify(students));
 }
 
-export function getUserAttendanceRecords(userId: string): AttendanceRecord[] {
-  const records = getAllAttendanceRecords();
-  return records
-    .filter((r) => r.userId === userId)
-    .sort((a, b) => {
-      // Sort newest date and time first
-      if (b.date !== a.date) {
-        return b.date.localeCompare(a.date);
-      }
-      return b.timeIn.localeCompare(a.timeIn);
-    });
-}
-
-export function createAttendanceRecord(
-  userId: string,
-  formData: AttendanceFormData
-): AttendanceRecord {
-  const records = getAllAttendanceRecords();
-  const now = new Date().toISOString();
-  const hours = calculateHours(formData.timeIn, formData.timeOut || null);
-
-  const newRecord: AttendanceRecord = {
-    id: 'att_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-    userId,
-    date: formData.date,
-    timeIn: formData.timeIn,
-    timeOut: formData.timeOut || null,
-    status: formData.status,
-    workLocation: formData.workLocation,
-    shift: formData.shift,
-    notes: formData.notes.trim(),
-    totalHours: hours,
-    createdAt: now,
-    updatedAt: now,
+export function addStudent(studentData: Omit<Student, 'id'>): Student {
+  const students = getAllStudents();
+  const newStudent: Student = {
+    id: 'std_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+    ...studentData,
   };
-
-  records.unshift(newRecord);
-  saveAllAttendanceRecords(records);
-  return newRecord;
+  students.push(newStudent);
+  // Sort alphabetically by name
+  students.sort((a, b) => a.name.localeCompare(b.name));
+  saveAllStudents(students);
+  return newStudent;
 }
 
-export function updateAttendanceRecord(
-  recordId: string,
-  formData: AttendanceFormData
-): AttendanceRecord | null {
-  const records = getAllAttendanceRecords();
-  const index = records.findIndex((r) => r.id === recordId);
+export function updateStudent(id: string, updates: Partial<Omit<Student, 'id'>>): Student | null {
+  const students = getAllStudents();
+  const index = students.findIndex((s) => s.id === id);
   if (index === -1) return null;
 
-  const hours = calculateHours(formData.timeIn, formData.timeOut || null);
-
-  records[index] = {
-    ...records[index],
-    date: formData.date,
-    timeIn: formData.timeIn,
-    timeOut: formData.timeOut || null,
-    status: formData.status,
-    workLocation: formData.workLocation,
-    shift: formData.shift,
-    notes: formData.notes.trim(),
-    totalHours: hours,
-    updatedAt: new Date().toISOString(),
-  };
-
-  saveAllAttendanceRecords(records);
-  return records[index];
+  students[index] = { ...students[index], ...updates };
+  students.sort((a, b) => a.name.localeCompare(b.name));
+  saveAllStudents(students);
+  return students[index];
 }
 
-export function deleteAttendanceRecord(recordId: string): boolean {
-  let records = getAllAttendanceRecords();
-  const initialLength = records.length;
-  records = records.filter((r) => r.id !== recordId);
-  if (records.length !== initialLength) {
-    saveAllAttendanceRecords(records);
+export function deleteStudent(id: string): boolean {
+  let students = getAllStudents();
+  const initialCount = students.length;
+  students = students.filter((s) => s.id !== id);
+  if (students.length !== initialCount) {
+    saveAllStudents(students);
     return true;
   }
   return false;
 }
 
-export function getTodayRecord(userId: string): AttendanceRecord | null {
-  const today = getTodayDateString();
-  const records = getUserAttendanceRecords(userId);
-  return records.find((r) => r.date === today) || null;
+// Classroom Attendance Session CRUD
+export function getAllAttendanceSessions(): ClassAttendanceSession[] {
+  initializeStorage();
+  try {
+    const raw = localStorage.getItem(ATTENDANCE_SESSIONS_KEY);
+    const list: ClassAttendanceSession[] = raw ? JSON.parse(raw) : INITIAL_SESSIONS;
+    return list.sort((a, b) => b.date.localeCompare(a.date));
+  } catch {
+    return INITIAL_SESSIONS;
+  }
 }
 
-export function punchIn(
-  userId: string,
-  workLocation: WorkLocation = 'office',
-  shift: ShiftType = 'morning',
-  notes: string = ''
-): AttendanceRecord {
-  const today = getTodayDateString();
-  const nowTime = getCurrentTimeString();
-
-  // Determine status (if after 09:15, mark as late)
-  const [h, m] = nowTime.split(':').map(Number);
-  const minutesOfDay = h * 60 + m;
-  const isLate = minutesOfDay > 9 * 60 + 15; // standard 9:15 AM threshold
-
-  return createAttendanceRecord(userId, {
-    date: today,
-    timeIn: nowTime,
-    timeOut: '',
-    status: isLate ? 'late' : workLocation === 'remote' ? 'remote' : 'present',
-    workLocation,
-    shift,
-    notes: notes || `Punched in at ${formatTime12h(nowTime)}`,
-  });
+export function saveAllAttendanceSessions(sessions: ClassAttendanceSession[]): void {
+  localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify(sessions));
 }
 
-export function punchOut(recordId: string, notes?: string): AttendanceRecord | null {
-  const records = getAllAttendanceRecords();
-  const index = records.findIndex((r) => r.id === recordId);
-  if (index === -1) return null;
-
-  const nowTime = getCurrentTimeString();
-  const timeIn = records[index].timeIn;
-  const hours = calculateHours(timeIn, nowTime);
-
-  records[index] = {
-    ...records[index],
-    timeOut: nowTime,
-    totalHours: hours,
-    notes: notes
-      ? `${records[index].notes ? records[index].notes + ' | ' : ''}${notes}`
-      : records[index].notes,
-    updatedAt: new Date().toISOString(),
-  };
-
-  saveAllAttendanceRecords(records);
-  return records[index];
+export function getAttendanceSessionById(id: string): ClassAttendanceSession | null {
+  const sessions = getAllAttendanceSessions();
+  return sessions.find((s) => s.id === id) || null;
 }
 
-export function calculateAttendanceStats(records: AttendanceRecord[]): AttendanceStats {
-  const totalDays = records.length;
-  if (totalDays === 0) {
+export function getAttendanceSessionByDate(date: string): ClassAttendanceSession | null {
+  const sessions = getAllAttendanceSessions();
+  return sessions.find((s) => s.date === date) || null;
+}
+
+export function saveOrUpdateAttendanceSession(
+  currentUser: User,
+  sessionData: {
+    id?: string;
+    date: string;
+    sessionType: 'Morning Roll Call' | 'Afternoon Roll Call' | 'Daily Attendance' | 'Subject Period';
+    gradeSection: string;
+    records: StudentAttendanceItem[];
+    notes?: string;
+  }
+): { success: boolean; message: string; session?: ClassAttendanceSession } {
+  // CRITICAL SECURITY CHECK: Only the Class President can submit/edit attendance!
+  if (currentUser.role !== 'class_president') {
     return {
-      totalDays: 0,
-      presentCount: 0,
-      lateCount: 0,
-      remoteCount: 0,
-      halfDayCount: 0,
-      onTimeRate: 0,
-      totalHours: 0,
-      averageHoursPerDay: 0,
+      success: false,
+      message: 'Access Denied: Only the Class President has authorization to record or update attendance.',
     };
   }
 
-  let presentCount = 0;
-  let lateCount = 0;
-  let remoteCount = 0;
-  let halfDayCount = 0;
-  let totalHours = 0;
-  let daysWithHours = 0;
+  const sessions = getAllAttendanceSessions();
+  const total = sessionData.records.length;
+  const presentCount = sessionData.records.filter((r) => r.status === 'present').length;
+  const absentCount = sessionData.records.filter((r) => r.status === 'absent').length;
+  const attendanceRate = total > 0 ? Math.round((presentCount / total) * 100) : 0;
+  const now = new Date().toISOString();
 
-  for (const rec of records) {
-    if (rec.status === 'present') presentCount++;
-    if (rec.status === 'late') lateCount++;
-    if (rec.status === 'remote') remoteCount++;
-    if (rec.status === 'half_day') halfDayCount++;
-
-    if (rec.totalHours && rec.totalHours > 0) {
-      totalHours += rec.totalHours;
-      daysWithHours++;
+  if (sessionData.id) {
+    // UPDATE existing session
+    const index = sessions.findIndex((s) => s.id === sessionData.id);
+    if (index !== -1) {
+      sessions[index] = {
+        ...sessions[index],
+        date: sessionData.date,
+        sessionType: sessionData.sessionType,
+        gradeSection: sessionData.gradeSection,
+        records: sessionData.records,
+        totalStudents: total,
+        presentCount,
+        absentCount,
+        attendanceRate,
+        notes: sessionData.notes || '',
+        updatedAt: now,
+      };
+      saveAllAttendanceSessions(sessions);
+      return { success: true, message: 'Classroom attendance updated successfully!', session: sessions[index] };
     }
   }
 
-  const onTimeCount = presentCount + remoteCount;
-  const onTimeRate = Math.round((onTimeCount / totalDays) * 100);
-  const averageHoursPerDay =
-    daysWithHours > 0 ? Math.round((totalHours / daysWithHours) * 10) / 10 : 0;
+  // CREATE new session (check if date already has a session of this type)
+  const existingSameDate = sessions.find(
+    (s) => s.date === sessionData.date && s.sessionType === sessionData.sessionType
+  );
+  if (existingSameDate) {
+    // Update the existing session instead of duplicating
+    existingSameDate.records = sessionData.records;
+    existingSameDate.totalStudents = total;
+    existingSameDate.presentCount = presentCount;
+    existingSameDate.absentCount = absentCount;
+    existingSameDate.attendanceRate = attendanceRate;
+    existingSameDate.notes = sessionData.notes || '';
+    existingSameDate.updatedAt = now;
+    saveAllAttendanceSessions(sessions);
+    return {
+      success: true,
+      message: `Updated existing attendance sheet for ${sessionData.date}.`,
+      session: existingSameDate,
+    };
+  }
 
-  return {
-    totalDays,
+  const newSession: ClassAttendanceSession = {
+    id: 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+    date: sessionData.date,
+    gradeSection: sessionData.gradeSection || currentUser.gradeSection || DEFAULT_SECTION,
+    sessionType: sessionData.sessionType,
+    presidentId: currentUser.id,
+    presidentName: `${currentUser.name} (Class President)`,
+    records: sessionData.records,
+    totalStudents: total,
     presentCount,
-    lateCount,
-    remoteCount,
-    halfDayCount,
-    onTimeRate,
-    totalHours: Math.round(totalHours * 10) / 10,
-    averageHoursPerDay,
+    absentCount,
+    attendanceRate,
+    notes: sessionData.notes || '',
+    createdAt: now,
+    updatedAt: now,
   };
+
+  sessions.unshift(newSession);
+  saveAllAttendanceSessions(sessions);
+  return {
+    success: true,
+    message: 'Attendance submitted successfully by Class President!',
+    session: newSession,
+  };
+}
+
+export function deleteAttendanceSession(
+  currentUser: User,
+  sessionId: string
+): { success: boolean; message: string } {
+  if (currentUser.role !== 'class_president') {
+    return {
+      success: false,
+      message: 'Access Denied: Only the Class President can delete attendance records.',
+    };
+  }
+
+  let sessions = getAllAttendanceSessions();
+  const initCount = sessions.length;
+  sessions = sessions.filter((s) => s.id !== sessionId);
+
+  if (sessions.length !== initCount) {
+    saveAllAttendanceSessions(sessions);
+    return { success: true, message: 'Attendance record deleted successfully.' };
+  }
+
+  return { success: false, message: 'Session not found.' };
+}
+
+// Student summaries across all sessions
+export function computeStudentSummaries(
+  students: Student[],
+  sessions: ClassAttendanceSession[]
+): StudentAttendanceSummary[] {
+  return students.map((std) => {
+    let presentCount = 0;
+    let absentCount = 0;
+    let lastStatus: AttendanceStatus | undefined = undefined;
+
+    // Check latest session first
+    if (sessions.length > 0) {
+      const matchInLatest = sessions[0].records.find((r) => r.studentId === std.id);
+      if (matchInLatest) {
+        lastStatus = matchInLatest.status;
+      }
+    }
+
+    for (const s of sessions) {
+      const record = s.records.find((r) => r.studentId === std.id);
+      if (record) {
+        if (record.status === 'present') presentCount++;
+        else if (record.status === 'absent') absentCount++;
+      }
+    }
+
+    const totalSessions = presentCount + absentCount;
+    const rate = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 100;
+
+    return {
+      studentId: std.id,
+      studentNumber: std.studentNumber,
+      name: std.name,
+      gender: std.gender,
+      totalSessions,
+      presentCount,
+      absentCount,
+      attendanceRate: rate,
+      lastStatus,
+    };
+  });
 }

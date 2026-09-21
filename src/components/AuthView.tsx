@@ -1,528 +1,383 @@
 import React, { useState } from 'react';
+import { UserRole } from '../types';
+import { loginUser, registerUser, DEFAULT_SECTION } from '../storage';
+import { useTheme } from '../ThemeContext';
 import {
-  CalendarCheck,
+  ClipboardCheck,
+  Crown,
+  User as UserIcon,
+  ShieldCheck,
   Lock,
   Mail,
-  User as UserIcon,
-  BadgeCheck,
-  Building,
-  Briefcase,
   ArrowRight,
+  School,
   Sparkles,
-  CheckCircle2,
-  AlertCircle,
-  Eye,
-  EyeOff,
+  Info,
 } from 'lucide-react';
-import { loginUser, registerUser } from '../storage';
-import { User } from '../types';
 
 interface AuthViewProps {
-  onAuthSuccess: (user: User) => void;
+  onSuccess: () => void;
 }
 
-export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
-  const [tab, setTab] = useState<'login' | 'register'>('login');
+export const AuthView: React.FC<AuthViewProps> = ({ onSuccess }) => {
+  const { theme } = useTheme();
+  const [isLogin, setIsLogin] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Login form state
-  const [loginIdentifier, setLoginIdentifier] = useState('jovinanunciado@gmail.com');
-  const [loginPassword, setLoginPassword] = useState('password123');
-  const [loginShowPassword, setLoginShowPassword] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
+  // Login inputs
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
-  // Register form state
+  // Register inputs
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regEmpId, setRegEmpId] = useState('');
-  const [regDepartment, setRegDepartment] = useState('Software Engineering');
-  const [regRole, setRegRole] = useState('Software Developer');
+  const [regStudentId, setRegStudentId] = useState('');
+  const [regRole, setRegRole] = useState<UserRole>('class_president');
+  const [regGradeSection, setRegGradeSection] = useState(DEFAULT_SECTION);
   const [regPassword, setRegPassword] = useState('');
-  const [regConfirmPassword, setRegConfirmPassword] = useState('');
-  const [regShowPassword, setRegShowPassword] = useState(false);
-  const [regError, setRegError] = useState<string | null>(null);
-  const [regSuccessMessage, setRegSuccessMessage] = useState<string | null>(null);
 
-  // Loading state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginError(null);
+    setError(null);
+    setSuccessMsg(null);
 
-    if (!loginIdentifier.trim() || !loginPassword.trim()) {
-      setLoginError('Please provide both your Email/ID and Password.');
-      return;
+    const res = loginUser(loginIdentifier, loginPassword);
+    if (res.success) {
+      onSuccess();
+    } else {
+      setError(res.message);
     }
-
-    setIsSubmitting(true);
-    setTimeout(() => {
-      const result = loginUser(loginIdentifier, loginPassword);
-      setIsSubmitting(false);
-
-      if (result.success && result.user) {
-        onAuthSuccess(result.user);
-      } else {
-        setLoginError(result.message || 'Failed to login');
-      }
-    }, 250);
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
-    setRegError(null);
-    setRegSuccessMessage(null);
+    setError(null);
+    setSuccessMsg(null);
 
-    if (!regName.trim() || !regEmail.trim() || !regEmpId.trim() || !regPassword.trim()) {
-      setRegError('Please complete all required fields.');
-      return;
+    const res = registerUser({
+      name: regName,
+      email: regEmail,
+      studentId: regStudentId,
+      role: regRole,
+      gradeSection: regGradeSection,
+      password: regPassword,
+    });
+
+    if (res.success) {
+      setSuccessMsg(res.message);
+      setIsLogin(true);
+      setLoginIdentifier(regEmail);
+      setLoginPassword('');
+    } else {
+      setError(res.message);
     }
-
-    if (regPassword.length < 6) {
-      setRegError('Password must be at least 6 characters long.');
-      return;
-    }
-
-    if (regPassword !== regConfirmPassword) {
-      setRegError('Passwords do not match. Please re-check.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setTimeout(() => {
-      const result = registerUser({
-        name: regName,
-        email: regEmail,
-        employeeId: regEmpId,
-        department: regDepartment,
-        role: regRole,
-        password: regPassword,
-      });
-
-      setIsSubmitting(false);
-
-      if (result.success) {
-        // User requested: "After register I will login"
-        setRegSuccessMessage('Registration successful! Please login with your new credentials.');
-        // Pre-fill login credentials
-        setLoginIdentifier(regEmail);
-        setLoginPassword(regPassword);
-        // Switch to login tab after brief pause
-        setTimeout(() => {
-          setTab('login');
-        }, 1200);
-      } else {
-        setRegError(result.message || 'Registration failed.');
-      }
-    }, 300);
   };
 
-  const fillDemoAccount = () => {
-    setTab('login');
-    setLoginIdentifier('jovinanunciado@gmail.com');
-    setLoginPassword('password123');
-    setLoginError(null);
+  const handleQuickDemo = (role: 'president' | 'student') => {
+    if (role === 'president') {
+      const res = loginUser('jovinanunciado@gmail.com', 'password123');
+      if (res.success) onSuccess();
+    } else {
+      const res = loginUser('liam@school.edu', 'student123');
+      if (res.success) onSuccess();
+    }
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-200 overflow-hidden">
-        {/* Top Header Card */}
-        <div className="px-6 pt-8 pb-6 bg-gradient-to-b from-slate-900 to-slate-800 text-white text-center">
-          <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto mb-3 shadow-inner">
-            <CalendarCheck className="w-6 h-6 text-emerald-400" />
+    <div className="min-h-[85vh] flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md">
+        {/* App Logo & Header */}
+        <div className="text-center mb-6">
+          <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl ${theme.brandIconBg} ${theme.brandIconText} shadow-md mb-3`}>
+            <ClipboardCheck className="w-8 h-8" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Attendance Tracker</h1>
-          <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">
-            Log your daily attendance, manage records with full CRUD, and view personal history.
+          <h1 className={`text-2xl font-bold ${theme.textPrimary} tracking-tight`}>
+            Classroom Attendance
+          </h1>
+          <p className={`text-xs ${theme.textMuted} mt-1 max-w-xs mx-auto`}>
+            Authorized Class President Roll Call & Student Attendance Management
           </p>
+        </div>
 
-          {/* Tab Switcher */}
-          <div className="mt-6 p-1 bg-slate-800/80 rounded-xl border border-slate-700/80 flex">
+        {/* Demo Quick Sign-in Pills */}
+        <div className={`${theme.cardBg} rounded-2xl border ${theme.cardBorder} p-4 ${theme.cardShadow} mb-4`}>
+          <span className={`text-[11px] font-bold ${theme.textMuted} uppercase tracking-wider block mb-2`}>
+            1-Click Demo Profiles
+          </span>
+          <div className="grid grid-cols-2 gap-2">
             <button
-              id="tab-login"
+              id="quick-login-president"
               type="button"
-              onClick={() => {
-                setTab('login');
-                setLoginError(null);
-              }}
-              className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-                tab === 'login'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              onClick={() => handleQuickDemo('president')}
+              className="p-2.5 rounded-xl border border-amber-300 bg-amber-50/70 hover:bg-amber-100 text-left transition-colors flex items-center gap-2.5"
             >
-              Login
+              <div className="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-bold shrink-0">
+                <Crown className="w-4 h-4" />
+              </div>
+              <div className="truncate">
+                <span className="text-xs font-bold text-amber-950 block truncate">
+                  Class President
+                </span>
+                <span className="text-[10px] text-amber-700 block truncate">
+                  Full Roll Call Access
+                </span>
+              </div>
             </button>
+
             <button
-              id="tab-register"
+              id="quick-login-student"
               type="button"
-              onClick={() => {
-                setTab('register');
-                setRegError(null);
-              }}
-              className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer ${
-                tab === 'register'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              onClick={() => handleQuickDemo('student')}
+              className="p-2.5 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-left transition-colors flex items-center gap-2.5"
             >
-              Register (Create User)
+              <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
+                <UserIcon className="w-4 h-4" />
+              </div>
+              <div className="truncate">
+                <span className="text-xs font-bold text-blue-950 block truncate">
+                  Regular Student
+                </span>
+                <span className="text-[10px] text-blue-700 block truncate">
+                  View-Only Access
+                </span>
+              </div>
             </button>
           </div>
         </div>
 
-        {/* Form Container */}
-        <div className="p-6 sm:p-7">
-          {/* LOGIN VIEW */}
-          {tab === 'login' && (
-            <div>
-              {regSuccessMessage && (
-                <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-900">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold block">Account Ready!</span>
-                    {regSuccessMessage}
-                  </div>
-                </div>
-              )}
+        {/* Main Card */}
+        <div className={`${theme.cardBg} rounded-2xl border ${theme.cardBorder} ${theme.cardShadow} p-6 sm:p-8`}>
+          {/* Tab Switcher */}
+          <div className="flex bg-black/5 p-1 rounded-xl mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLogin(true);
+                setError(null);
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                isLogin ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsLogin(false);
+                setError(null);
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                !isLogin ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Register Account
+            </button>
+          </div>
 
-              {loginError && (
-                <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-900">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold block">Sign-in Failed</span>
-                    {loginError}
-                  </div>
-                </div>
-              )}
-
-              <form onSubmit={handleLoginSubmit} className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="login-email"
-                    className="block text-xs font-semibold text-slate-700 mb-1.5"
-                  >
-                    Email Address or Employee ID
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Mail className="w-4 h-4" />
-                    </div>
-                    <input
-                      id="login-email"
-                      type="text"
-                      required
-                      value={loginIdentifier}
-                      onChange={(e) => setLoginIdentifier(e.target.value)}
-                      placeholder="e.g. jovinanunciado@gmail.com or EMP-7824"
-                      className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label
-                      htmlFor="login-password"
-                      className="block text-xs font-semibold text-slate-700"
-                    >
-                      Password
-                    </label>
-                  </div>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <input
-                      id="login-password"
-                      type={loginShowPassword ? 'text' : 'password'}
-                      required
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="Enter password"
-                      className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setLoginShowPassword(!loginShowPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
-                    >
-                      {loginShowPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  id="btn-login-submit"
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 active:bg-black text-white text-sm font-semibold rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-70 mt-2"
-                >
-                  {isSubmitting ? (
-                    <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                  ) : (
-                    <>
-                      <span>Login to Dashboard</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* Demo Account Quick-Fill */}
-              <div className="mt-6 pt-5 border-t border-slate-100 text-center">
-                <p className="text-xs text-slate-500 mb-2.5">
-                  Need a pre-seeded account to test immediately?
-                </p>
-                <button
-                  id="btn-fill-demo"
-                  type="button"
-                  onClick={fillDemoAccount}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Fill Demo Account (Jovin Anunciado)</span>
-                </button>
-              </div>
+          {/* Feedback message */}
+          {error && (
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700">
+              {error}
+            </div>
+          )}
+          {successMsg && (
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700">
+              {successMsg}
             </div>
           )}
 
-          {/* REGISTER VIEW (Create User) */}
-          {tab === 'register' && (
-            <div>
-              {regError && (
-                <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-900">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold block">Registration Error</span>
-                    {regError}
-                  </div>
+          {isLogin ? (
+            /* LOGIN FORM */
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className={`block text-xs font-bold ${theme.textSecondary} uppercase mb-1.5`}>
+                  Email or Student / President ID
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    id="login-id"
+                    type="text"
+                    required
+                    value={loginIdentifier}
+                    onChange={(e) => setLoginIdentifier(e.target.value)}
+                    placeholder="e.g. jovinanunciado@gmail.com or PRES-2026-01"
+                    className={`w-full pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 ${theme.ringColor} focus:outline-hidden`}
+                  />
                 </div>
-              )}
-
-              <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-                <div>
-                  <label
-                    htmlFor="reg-name"
-                    className="block text-xs font-semibold text-slate-700 mb-1"
-                  >
-                    Full Name *
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <UserIcon className="w-4 h-4" />
-                    </div>
-                    <input
-                      id="reg-name"
-                      type="text"
-                      required
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      placeholder="e.g. Maria Santos"
-                      className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label
-                      htmlFor="reg-email"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Email Address *
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <Mail className="w-4 h-4" />
-                      </div>
-                      <input
-                        id="reg-email"
-                        type="email"
-                        required
-                        value={regEmail}
-                        onChange={(e) => setRegEmail(e.target.value)}
-                        placeholder="user@example.com"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="reg-empid"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Employee / Student ID *
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <BadgeCheck className="w-4 h-4" />
-                      </div>
-                      <input
-                        id="reg-empid"
-                        type="text"
-                        required
-                        value={regEmpId}
-                        onChange={(e) => setRegEmpId(e.target.value)}
-                        placeholder="e.g. EMP-2026-99"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label
-                      htmlFor="reg-dept"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Department
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <Building className="w-4 h-4" />
-                      </div>
-                      <select
-                        id="reg-dept"
-                        value={regDepartment}
-                        onChange={(e) => setRegDepartment(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                      >
-                        <option value="Software Engineering">Engineering</option>
-                        <option value="Information Technology">Information Tech</option>
-                        <option value="Human Resources">Human Resources</option>
-                        <option value="Operations & Logistics">Operations</option>
-                        <option value="Marketing & Sales">Marketing / Sales</option>
-                        <option value="Finance & Accounting">Finance</option>
-                        <option value="Academic / Student">Academic / Student</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="reg-role"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Role / Designation
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <Briefcase className="w-4 h-4" />
-                      </div>
-                      <input
-                        id="reg-role"
-                        type="text"
-                        value={regRole}
-                        onChange={(e) => setRegRole(e.target.value)}
-                        placeholder="e.g. Project Associate"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label
-                      htmlFor="reg-password"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Password *
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <Lock className="w-4 h-4" />
-                      </div>
-                      <input
-                        id="reg-password"
-                        type={regShowPassword ? 'text' : 'password'}
-                        required
-                        minLength={6}
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="Min 6 chars"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="reg-confirm-password"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Confirm Password *
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <Lock className="w-4 h-4" />
-                      </div>
-                      <input
-                        id="reg-confirm-password"
-                        type={regShowPassword ? 'text' : 'password'}
-                        required
-                        value={regConfirmPassword}
-                        onChange={(e) => setRegConfirmPassword(e.target.value)}
-                        placeholder="Repeat password"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setRegShowPassword(!regShowPassword)}
-                    className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
-                  >
-                    {regShowPassword ? (
-                      <EyeOff className="w-3.5 h-3.5" />
-                    ) : (
-                      <Eye className="w-3.5 h-3.5" />
-                    )}
-                    <span>{regShowPassword ? 'Hide password' : 'Show password'}</span>
-                  </button>
-                </div>
-
-                <button
-                  id="btn-register-submit"
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 active:bg-black text-white text-sm font-semibold rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-70 mt-2"
-                >
-                  {isSubmitting ? (
-                    <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                  ) : (
-                    <>
-                      <span>Complete Registration</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </form>
-
-              <div className="mt-4 text-center">
-                <p className="text-xs text-slate-500">
-                  Already registered?{' '}
-                  <button
-                    type="button"
-                    onClick={() => setTab('login')}
-                    className="text-slate-900 font-semibold underline underline-offset-2 hover:text-slate-700 cursor-pointer"
-                  >
-                    Go to Sign In
-                  </button>
-                </p>
               </div>
-            </div>
+
+              <div>
+                <label className={`block text-xs font-bold ${theme.textSecondary} uppercase mb-1.5`}>
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    id="login-password"
+                    type="password"
+                    required
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className={`w-full pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 ${theme.ringColor} focus:outline-hidden`}
+                  />
+                </div>
+              </div>
+
+              <button
+                id="btn-submit-login"
+                type="submit"
+                className={`w-full py-2.5 ${theme.primaryBtn} text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 mt-2`}
+              >
+                <span>Sign In to Classroom</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
+          ) : (
+            /* REGISTER FORM */
+            <form onSubmit={handleRegister} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  placeholder="e.g. Jovin Anunciado"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="you@school.edu"
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    ID Number
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={regStudentId}
+                    onChange={(e) => setRegStudentId(e.target.value)}
+                    placeholder="PRES-2026-01"
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Role Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                  Select Classroom Role
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label
+                    className={`flex flex-col items-center text-center p-3 rounded-xl border cursor-pointer transition-all ${
+                      regRole === 'class_president'
+                        ? 'bg-amber-50 border-amber-500 text-amber-950 ring-1 ring-amber-500'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="role"
+                      value="class_president"
+                      checked={regRole === 'class_president'}
+                      onChange={() => setRegRole('class_president')}
+                      className="sr-only"
+                    />
+                    <Crown className="w-5 h-5 text-amber-500 mb-1" />
+                    <span className="text-xs font-bold">Class President</span>
+                    <span className="text-[10px] text-amber-700 mt-0.5">
+                      Can take attendance
+                    </span>
+                  </label>
+
+                  <label
+                    className={`flex flex-col items-center text-center p-3 rounded-xl border cursor-pointer transition-all ${
+                      regRole === 'student'
+                        ? 'bg-blue-50 border-blue-500 text-blue-950 ring-1 ring-blue-500'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="role"
+                      value="student"
+                      checked={regRole === 'student'}
+                      onChange={() => setRegRole('student')}
+                      className="sr-only"
+                    />
+                    <UserIcon className="w-5 h-5 text-blue-600 mb-1" />
+                    <span className="text-xs font-bold">Student</span>
+                    <span className="text-[10px] text-blue-700 mt-0.5">
+                      View attendance
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Section / Class
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={regGradeSection}
+                  onChange={(e) => setRegGradeSection(e.target.value)}
+                  placeholder="Grade 10 - Diamond"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="Create password"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className={`w-full py-2.5 ${theme.primaryBtn} text-sm font-bold rounded-xl shadow-xs transition-colors mt-2`}
+              >
+                Create Account
+              </button>
+            </form>
           )}
+        </div>
+
+        {/* Offline & Privacy Footer note */}
+        <div className="mt-4 text-center">
+          <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Runs 100% offline with local browser storage</span>
+          </p>
         </div>
       </div>
     </div>

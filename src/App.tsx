@@ -1,54 +1,52 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   getCurrentSession,
-  getUserAttendanceRecords,
-  createAttendanceRecord,
-  updateAttendanceRecord,
-  deleteAttendanceRecord,
-  deleteUserAccount,
-  punchIn,
-  punchOut,
-  calculateAttendanceStats,
-  getTodayRecord,
+  setCurrentSession,
   logoutUser,
+  getAllStudents,
+  getAllAttendanceSessions,
+  getAllUsers,
 } from './storage';
-import { AttendanceFormData, AttendanceRecord, User, WorkLocation } from './types';
+import { User, Student, ClassAttendanceSession } from './types';
+import { ThemeProvider, useTheme } from './ThemeContext';
 import { Navbar } from './components/Navbar';
+import { RollCallView } from './components/RollCallView';
+import { HistoryView } from './components/HistoryView';
+import { RosterView } from './components/RosterView';
 import { AuthView } from './components/AuthView';
-import { QuickPunchCard } from './components/QuickPunchCard';
-import { AttendanceHistoryTable } from './components/AttendanceHistoryTable';
-import { AttendanceFormModal } from './components/AttendanceFormModal';
-import { ProfileModal } from './components/ProfileModal';
-import { DeleteConfirmModal } from './components/DeleteConfirmModal';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  AlertCircle,
+  Crown,
+  User as UserIcon,
+  ShieldAlert,
+  ArrowRightLeft,
+} from 'lucide-react';
 
-export default function App() {
+function ClassroomAttendanceApp() {
+  const { theme } = useTheme();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{
-    type: 'record' | 'account';
-    data?: AttendanceRecord;
-  } | null>(null);
+  const [activeTab, setActiveTab] = useState<'rollcall' | 'history' | 'roster'>('rollcall');
 
-  // Toast notifications
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(
+  // Data states
+  const [students, setStudents] = useState<Student[]>([]);
+  const [sessions, setSessions] = useState<ClassAttendanceSession[]>([]);
+  const [editingSession, setEditingSession] = useState<ClassAttendanceSession | null>(null);
+
+  // Switch role modal
+  const [isRoleSwitchModalOpen, setIsRoleSwitchModalOpen] = useState(false);
+
+  // Toast
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(
     null
   );
 
-  const showToast = useCallback(
-    (message: string, type: 'success' | 'info' | 'error' = 'success') => {
-      setToast({ message, type });
-      setTimeout(() => {
-        setToast(null);
-      }, 3500);
-    },
-    []
-  );
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
-  // Check existing session on mount
+  // Load active session on mount
   useEffect(() => {
     const session = getCurrentSession();
     if (session) {
@@ -56,229 +54,228 @@ export default function App() {
     }
   }, []);
 
-  // Refresh records when user changes
-  const refreshRecords = useCallback((userId: string) => {
-    const userRecords = getUserAttendanceRecords(userId);
-    setRecords(userRecords);
+  // Refresh all state
+  const loadData = useCallback(() => {
+    setStudents(getAllStudents());
+    setSessions(getAllAttendanceSessions());
   }, []);
 
   useEffect(() => {
-    if (currentUser) {
-      refreshRecords(currentUser.id);
-    } else {
-      setRecords([]);
-    }
-  }, [currentUser, refreshRecords]);
-
-  // Auth Handlers
-  const handleAuthSuccess = (user: User) => {
-    setCurrentUser(user);
-    refreshRecords(user.id);
-    showToast(`Welcome back, ${user.name}!`);
-  };
+    loadData();
+  }, [loadData]);
 
   const handleLogout = () => {
     logoutUser();
     setCurrentUser(null);
-    setRecords([]);
-    setIsLogModalOpen(false);
-    setIsProfileModalOpen(false);
-    showToast('Logged out successfully.', 'info');
+    setEditingSession(null);
+    showToast('You have signed out.', 'info');
   };
 
-  // Attendance CRUD Handlers
-  const handlePunchIn = (location: WorkLocation, notes?: string) => {
-    if (!currentUser) return;
-    const newRecord = punchIn(currentUser.id, location, 'morning', notes);
-    refreshRecords(currentUser.id);
-    showToast(`Punched in successfully at ${newRecord.timeIn}!`);
+  const handleAuthSuccess = () => {
+    const session = getCurrentSession();
+    setCurrentUser(session);
+    loadData();
+    showToast(`Welcome back, ${session?.name}!`, 'success');
   };
 
-  const handlePunchOut = (recordId: string, notes?: string) => {
-    if (!currentUser) return;
-    const updated = punchOut(recordId, notes);
-    refreshRecords(currentUser.id);
-    if (updated) {
-      showToast(`Punched out at ${updated.timeOut}. Total: ${updated.totalHours} hrs`);
+  // Switch to another account/role
+  const handleSwitchAccount = (targetRole: 'class_president' | 'student') => {
+    const users = getAllUsers();
+    const target = users.find((u) => u.role === targetRole);
+    if (target) {
+      const { passwordHash, ...safe } = target;
+      setCurrentSession(safe);
+      setCurrentUser(safe);
+      setIsRoleSwitchModalOpen(false);
+      setEditingSession(null);
+      showToast(
+        `Switched to ${safe.role === 'class_president' ? 'Class President' : 'Student'} (${safe.name})`,
+        'success'
+      );
     }
   };
 
-  const handleSaveAttendance = (formData: AttendanceFormData) => {
-    if (!currentUser) return;
-
-    if (editingRecord) {
-      // UPDATE Record
-      const updated = updateAttendanceRecord(editingRecord.id, formData);
-      if (updated) {
-        showToast('Attendance record updated successfully.');
-      }
-    } else {
-      // CREATE Record
-      createAttendanceRecord(currentUser.id, formData);
-      showToast('New attendance record created.');
-    }
-
-    refreshRecords(currentUser.id);
-    setIsLogModalOpen(false);
-    setEditingRecord(null);
+  // When president clicks edit on a history card
+  const handleEditSessionFromHistory = (session: ClassAttendanceSession) => {
+    setEditingSession(session);
+    setActiveTab('rollcall');
   };
-
-  const handleOpenEdit = (record: AttendanceRecord) => {
-    setEditingRecord(record);
-    setIsLogModalOpen(true);
-  };
-
-  const handlePromptDeleteRecord = (record: AttendanceRecord) => {
-    setDeleteTarget({ type: 'record', data: record });
-  };
-
-  const handlePromptDeleteAccount = () => {
-    setIsProfileModalOpen(false);
-    setDeleteTarget({ type: 'account' });
-  };
-
-  const handleConfirmDelete = () => {
-    if (!deleteTarget || !currentUser) return;
-
-    if (deleteTarget.type === 'record' && deleteTarget.data) {
-      // DELETE Attendance Record
-      const success = deleteAttendanceRecord(deleteTarget.data.id);
-      if (success) {
-        showToast('Attendance record deleted.');
-        refreshRecords(currentUser.id);
-      }
-    } else if (deleteTarget.type === 'account') {
-      // DELETE User Account
-      const res = deleteUserAccount(currentUser.id);
-      if (res.success) {
-        setCurrentUser(null);
-        setRecords([]);
-        showToast('Your account and all records have been deleted.', 'info');
-      }
-    }
-
-    setDeleteTarget(null);
-  };
-
-  // Today's record for punch card
-  const todayRecord = currentUser ? getTodayRecord(currentUser.id) : null;
-  const stats = calculateAttendanceStats(records);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-5 right-5 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
-          <div
-            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-xs sm:text-sm font-semibold ${
-              toast.type === 'success'
-                ? 'bg-slate-900 text-white border-slate-800'
-                : toast.type === 'error'
-                ? 'bg-rose-600 text-white border-rose-700'
-                : 'bg-slate-800 text-slate-100 border-slate-700'
-            }`}
-          >
-            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-200" />}
-            <span>{toast.message}</span>
+    <div className={`min-h-screen ${theme.appBg} ${theme.textPrimary} flex flex-col transition-colors duration-200`}>
+      {/* Top Navbar */}
+      <Navbar
+        currentUser={currentUser}
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          if (tab !== 'rollcall') {
+            setEditingSession(null);
+          }
+        }}
+        onLogout={handleLogout}
+        onSwitchRole={() => setIsRoleSwitchModalOpen(true)}
+      />
+
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {!currentUser ? (
+          <AuthView onSuccess={handleAuthSuccess} />
+        ) : (
+          <div>
+            {activeTab === 'rollcall' && (
+              <RollCallView
+                currentUser={currentUser}
+                students={students}
+                allSessions={sessions}
+                editingSession={editingSession}
+                onSessionSaved={() => {
+                  loadData();
+                  setEditingSession(null);
+                  showToast('Classroom attendance saved successfully!', 'success');
+                }}
+                onCancelEdit={() => setEditingSession(null)}
+                onSwitchRole={() => setIsRoleSwitchModalOpen(true)}
+              />
+            )}
+
+            {activeTab === 'history' && (
+              <HistoryView
+                currentUser={currentUser}
+                sessions={sessions}
+                onEditSession={handleEditSessionFromHistory}
+                onSessionDeleted={() => {
+                  loadData();
+                  showToast('Attendance record deleted.', 'info');
+                }}
+              />
+            )}
+
+            {activeTab === 'roster' && (
+              <RosterView
+                currentUser={currentUser}
+                students={students}
+                sessions={sessions}
+                onRosterChanged={() => {
+                  loadData();
+                  showToast('Classroom student roster updated.', 'success');
+                }}
+              />
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* ROLE SWITCHER MODAL */}
+      {isRoleSwitchModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className={`${theme.cardBg} w-full max-w-md rounded-2xl p-6 shadow-xl border ${theme.cardBorder}`}>
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className={`w-8 h-8 rounded-lg ${theme.primaryLightBg} ${theme.primaryText} flex items-center justify-center`}>
+                <ArrowRightLeft className="w-4 h-4" />
+              </div>
+              <h3 className={`text-base font-bold ${theme.textPrimary}`}>Switch User Account / Role</h3>
+            </div>
+            <p className={`text-xs ${theme.textMuted} mb-5`}>
+              Test how the application enforces role permissions between the authorized <strong>Class President</strong> and regular <strong>Students</strong>.
+            </p>
+
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => handleSwitchAccount('class_president')}
+                className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                  currentUser?.role === 'class_president'
+                    ? 'border-amber-500 bg-amber-50/70 ring-1 ring-amber-500'
+                    : `border-slate-200 hover:border-amber-300 hover:bg-slate-50`
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold">
+                    <Crown className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-slate-900">Jovin Anunciado</span>
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded border border-amber-200">
+                        Class President
+                      </span>
+                    </div>
+                    <span className="text-xs text-amber-700 block">
+                      ✓ Can take roll call & mark Present/Absent
+                    </span>
+                  </div>
+                </div>
+                {currentUser?.role === 'class_president' && (
+                  <span className="text-xs font-bold text-amber-700">Active</span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSwitchAccount('student')}
+                className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                  currentUser?.role === 'student'
+                    ? 'border-blue-500 bg-blue-50/70 ring-1 ring-blue-500'
+                    : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
+                    <UserIcon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-slate-900">Liam Santos</span>
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
+                        Student
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-500 block">
+                      Read-only personal attendance access
+                    </span>
+                  </div>
+                </div>
+                {currentUser?.role === 'student' && (
+                  <span className="text-xs font-bold text-blue-700">Active</span>
+                )}
+              </button>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsRoleSwitchModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Main Content Area */}
-      {!currentUser ? (
-        /* Not logged in: Show Authentication View (Register & Login) */
-        <main className="flex-1 flex flex-col justify-center">
-          <AuthView onAuthSuccess={handleAuthSuccess} />
-        </main>
-      ) : (
-        /* Logged in: Show Navbar, Quick Punch, and Attendance Dashboard */
-        <div className="flex-1 flex flex-col">
-          <Navbar
-            user={currentUser}
-            onLogout={handleLogout}
-            onOpenProfile={() => setIsProfileModalOpen(true)}
-            onOpenLogModal={() => {
-              setEditingRecord(null);
-              setIsLogModalOpen(true);
-            }}
-          />
-
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-            {/* Quick Attendance Login / Punch Card */}
-            <QuickPunchCard
-              todayRecord={todayRecord}
-              onPunchIn={handlePunchIn}
-              onPunchOut={handlePunchOut}
-              onOpenDetailedForm={() => {
-                setEditingRecord(null);
-                setIsLogModalOpen(true);
-              }}
-              onEditTodayRecord={handleOpenEdit}
-            />
-
-            {/* Attendance History Dashboard & Records Table */}
-            <AttendanceHistoryTable
-              records={records}
-              stats={stats}
-              onEdit={handleOpenEdit}
-              onDelete={handlePromptDeleteRecord}
-              onOpenLogModal={() => {
-                setEditingRecord(null);
-                setIsLogModalOpen(true);
-              }}
-            />
-          </main>
+      {/* Global Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium bg-white border-slate-200 text-slate-800 animate-in fade-in slide-in-from-bottom-2">
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : toast.type === 'error' ? (
+            <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
+          )}
+          <span>{toast.message}</span>
         </div>
       )}
-
-      {/* Attendance Form Modal (Create / Update Record) */}
-      <AttendanceFormModal
-        isOpen={isLogModalOpen}
-        editingRecord={editingRecord}
-        onClose={() => {
-          setIsLogModalOpen(false);
-          setEditingRecord(null);
-        }}
-        onSubmit={handleSaveAttendance}
-      />
-
-      {/* User Profile & Account Settings Modal (Update User) */}
-      {currentUser && (
-        <ProfileModal
-          isOpen={isProfileModalOpen}
-          user={currentUser}
-          onClose={() => setIsProfileModalOpen(false)}
-          onProfileUpdated={(updatedUser) => {
-            setCurrentUser(updatedUser);
-            showToast('Profile information updated.');
-          }}
-          onRequestDeleteAccount={handlePromptDeleteAccount}
-        />
-      )}
-
-      {/* Delete Confirmation Modal (Delete Record / Delete Account) */}
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        title={
-          deleteTarget?.type === 'account'
-            ? 'Delete Your Account?'
-            : 'Delete Attendance Record?'
-        }
-        description={
-          deleteTarget?.type === 'account'
-            ? 'This will permanently delete your user profile and all your attendance logs from the local database. This action cannot be undone.'
-            : `Are you sure you want to delete the attendance log for ${
-                deleteTarget?.data?.date
-                  ? new Date(deleteTarget.data.date + 'T00:00:00').toLocaleDateString()
-                  : 'this date'
-              }? This cannot be restored.`
-        }
-        confirmButtonText={deleteTarget?.type === 'account' ? 'Delete Account' : 'Delete Record'}
-        isDestructiveAccount={deleteTarget?.type === 'account'}
-        onConfirm={handleConfirmDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ClassroomAttendanceApp />
+    </ThemeProvider>
   );
 }

@@ -1,56 +1,66 @@
-export type AttendanceStatus = 'present' | 'late' | 'remote' | 'half_day' | 'on_leave';
+export type UserRole = 'class_president' | 'student';
 
-export type WorkLocation = 'office' | 'remote' | 'client' | 'field';
-
-export type ShiftType = 'morning' | 'evening' | 'flexible';
+export type AttendanceStatus = 'present' | 'absent';
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  employeeId: string;
-  department: string;
-  role: string;
+  studentId: string;
+  role: UserRole;
+  gradeSection: string;
   avatarColor: string;
   createdAt: string;
 }
 
 export interface UserRecord extends User {
-  passwordHash: string; // stored in local store for demo auth
+  passwordHash: string;
 }
 
-export interface AttendanceRecord {
+export interface Student {
   id: string;
-  userId: string;
-  date: string; // YYYY-MM-DD
-  timeIn: string; // HH:MM
-  timeOut: string | null; // HH:MM or null
+  studentNumber: string; // e.g., "STD-2026-001"
+  name: string;
+  gender: 'Male' | 'Female';
+  gradeSection: string;
+  email?: string;
+  guardianPhone?: string;
+}
+
+export interface StudentAttendanceItem {
+  studentId: string;
+  studentName: string;
+  studentNumber: string;
+  gender: 'Male' | 'Female';
   status: AttendanceStatus;
-  workLocation: WorkLocation;
-  shift: ShiftType;
+  remarks?: string;
+}
+
+export interface ClassAttendanceSession {
+  id: string;
+  date: string; // YYYY-MM-DD
+  gradeSection: string;
+  sessionType: 'Morning Roll Call' | 'Afternoon Roll Call' | 'Daily Attendance' | 'Subject Period';
+  presidentId: string;
+  presidentName: string;
+  records: StudentAttendanceItem[];
+  totalStudents: number;
+  presentCount: number;
+  absentCount: number;
+  attendanceRate: number; // percentage e.g. 92
   notes: string;
-  totalHours: number | null; // e.g. 8.5
   createdAt: string;
   updatedAt: string;
 }
 
-export interface AttendanceFormData {
-  date: string;
-  timeIn: string;
-  timeOut: string;
-  status: AttendanceStatus;
-  workLocation: WorkLocation;
-  shift: ShiftType;
-  notes: string;
-}
-
-export interface AttendanceStats {
-  totalDays: number;
+export interface StudentAttendanceSummary {
+  studentId: string;
+  studentNumber: string;
+  name: string;
+  gender: 'Male' | 'Female';
+  totalSessions: number;
   presentCount: number;
-  lateCount: number;
-  remoteCount: number;
-  halfDayCount: number;
-  onTimeRate: number; // percentage
-  totalHours: number;
-  averageHoursPerDay: number;
+  absentCount: number;
+  attendanceRate: number; // percentage
+  lastStatus?: AttendanceStatus;
 }

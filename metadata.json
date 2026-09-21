@@ -1,6 +1,6 @@
 {
-  "name": "Attendance Tracker",
-  "description": "Personal attendance management system featuring user registration, secure authentication, attendance logging form, full CRUD record management, and history dashboard.",
+  "name": "Classroom Attendance",
+  "description": "Classroom attendance management system where only the Class President can take and manage daily attendance (Present or Absent) with student roster management and history records.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
