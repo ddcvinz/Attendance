@@ -6,7 +6,9 @@ import {
   addStudent,
   updateStudent,
   deleteStudent,
-  DEFAULT_SECTION,
+  getClassroomConfig,
+  saveClassroomConfig,
+  resetPresidentPassword,
 } from '../storage';
 import {
   Users,
@@ -14,13 +16,14 @@ import {
   Search,
   Edit,
   Trash2,
-  CheckCircle2,
-  XCircle,
-  Clock,
   Crown,
   X,
-  User as UserIcon,
-  Sparkles,
+  GraduationCap,
+  Save,
+  KeyRound,
+  CheckCircle2,
+  ShieldAlert,
+  School,
 } from 'lucide-react';
 
 interface RosterViewProps {
@@ -28,6 +31,7 @@ interface RosterViewProps {
   students: Student[];
   sessions: ClassAttendanceSession[];
   onRosterChanged: () => void;
+  onConfigChanged?: () => void;
 }
 
 export const RosterView: React.FC<RosterViewProps> = ({
@@ -35,43 +39,71 @@ export const RosterView: React.FC<RosterViewProps> = ({
   students,
   sessions,
   onRosterChanged,
+  onConfigChanged,
 }) => {
   const { theme } = useTheme();
-  const isPresident = currentUser.role === 'class_president';
+  const isTeacher = currentUser.role === 'teacher';
 
+  // Classroom Config state (Grade & Section)
+  const currentConfig = getClassroomConfig();
+  const [gradeSectionInput, setGradeSectionInput] = useState(currentConfig.gradeSection);
+  const [adviserNameInput, setAdviserNameInput] = useState(currentConfig.adviserName);
+  const [configSavedNotice, setConfigSavedNotice] = useState(false);
+
+  // Search & filter
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState<'all' | 'Male' | 'Female'>('all');
 
-  // Add / Edit student state
+  // Add / Edit modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentForm, setStudentForm] = useState({
     studentNumber: '',
     name: '',
     gender: 'Male' as 'Male' | 'Female',
-    email: '',
-    guardianPhone: '',
+    officerRole: '',
   });
+
+  // Reset President Password Modal (Adviser feature)
+  const [isResetPwdModalOpen, setIsResetPwdModalOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('password123');
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
   // Delete confirmation
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
 
-  // Student Drilldown modal
-  const [drilldownStudent, setDrilldownStudent] = useState<StudentAttendanceSummary | null>(null);
+  // Summaries
+  const summaries = useMemo(
+    () => computeStudentSummaries(students, sessions),
+    [students, sessions]
+  );
 
-  const summaries = useMemo(() => {
-    return computeStudentSummaries(students, sessions);
-  }, [students, sessions]);
-
-  const filteredSummaries = useMemo(() => {
-    return summaries.filter((s) => {
-      const matchSearch =
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const matchQuery =
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.studentNumber.toLowerCase().includes(searchQuery.toLowerCase());
+        s.studentNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.officerRole && s.officerRole.toLowerCase().includes(searchQuery.toLowerCase()));
+
       const matchGender = genderFilter === 'all' || s.gender === genderFilter;
-      return matchSearch && matchGender;
+      return matchQuery && matchGender;
     });
-  }, [summaries, searchQuery, genderFilter]);
+  }, [students, searchQuery, genderFilter]);
+
+  // Handle Save Grade & Section config
+  const handleSaveConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isTeacher) return;
+    saveClassroomConfig({
+      ...currentConfig,
+      gradeSection: gradeSectionInput.trim(),
+      adviserName: adviserNameInput.trim(),
+    });
+    setConfigSavedNotice(true);
+    if (onConfigChanged) onConfigChanged();
+    onRosterChanged();
+    setTimeout(() => setConfigSavedNotice(false), 3000);
+  };
 
   const handleOpenAdd = () => {
     setEditingStudent(null);
@@ -80,8 +112,7 @@ export const RosterView: React.FC<RosterViewProps> = ({
       studentNumber: `2026-${nextNum}`,
       name: '',
       gender: 'Male',
-      email: '',
-      guardianPhone: '',
+      officerRole: '',
     });
     setIsModalOpen(true);
   };
@@ -92,32 +123,31 @@ export const RosterView: React.FC<RosterViewProps> = ({
       studentNumber: student.studentNumber,
       name: student.name,
       gender: student.gender,
-      email: student.email || '',
-      guardianPhone: student.guardianPhone || '',
+      officerRole: student.officerRole || '',
     });
     setIsModalOpen(true);
   };
 
   const handleSaveStudent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isPresident) return;
+    if (!isTeacher) return;
+
+    if (!studentForm.name.trim()) return;
 
     if (editingStudent) {
       updateStudent(editingStudent.id, {
         studentNumber: studentForm.studentNumber.trim(),
         name: studentForm.name.trim(),
         gender: studentForm.gender,
-        email: studentForm.email.trim(),
-        guardianPhone: studentForm.guardianPhone.trim(),
+        officerRole: studentForm.officerRole.trim() || undefined,
       });
     } else {
       addStudent({
         studentNumber: studentForm.studentNumber.trim(),
         name: studentForm.name.trim(),
         gender: studentForm.gender,
-        gradeSection: currentUser.gradeSection || DEFAULT_SECTION,
-        email: studentForm.email.trim(),
-        guardianPhone: studentForm.guardianPhone.trim(),
+        officerRole: studentForm.officerRole.trim() || undefined,
+        gradeSection: gradeSectionInput,
       });
     }
 
@@ -125,217 +155,240 @@ export const RosterView: React.FC<RosterViewProps> = ({
     onRosterChanged();
   };
 
-  const handleDeleteConfirm = () => {
-    if (!studentToDelete || !isPresident) return;
+  const handleDeleteStudent = () => {
+    if (!isTeacher || !studentToDelete) return;
     deleteStudent(studentToDelete.id);
     setStudentToDelete(null);
     onRosterChanged();
   };
 
-  // Find drilldown sessions for specific student
-  const studentSessionHistory = useMemo(() => {
-    if (!drilldownStudent) return [];
-    return sessions.map((s) => {
-      const rec = s.records.find((r) => r.studentId === drilldownStudent.studentId);
-      return {
-        date: s.date,
-        sessionType: s.sessionType,
-        status: rec?.status || 'unrecorded',
-        remarks: rec?.remarks || '',
-      };
-    });
-  }, [drilldownStudent, sessions]);
+  const handleResetPresidentPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isTeacher) return;
+    const res = resetPresidentPassword(newPassword);
+    setResetSuccess(res.message);
+    setTimeout(() => {
+      setResetSuccess(null);
+      setIsResetPwdModalOpen(false);
+    }, 2500);
+  };
 
   return (
     <div className="space-y-6">
-      {/* Roster Header */}
-      <div className={`${theme.cardBg} rounded-2xl border ${theme.cardBorder} p-5 ${theme.cardShadow} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
+      {/* 1. ADVISER SETUP: GRADE & SECTION (Prompt requirement: "kung ang adviser mo sign in siya mag input sa grade and section followed by the list of students and officers") */}
+      {isTeacher && (
+        <div className="bg-white rounded-2xl border-2 border-amber-200/90 p-5 shadow-xs">
+          <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
+            <div className="w-8 h-8 rounded-lg bg-red-100 text-red-800 flex items-center justify-center">
+              <School className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-extrabold text-stone-900">
+                Adviser Classroom Setup
+              </h2>
+              <p className="text-xs text-stone-500">
+                Configure your Grade & Section and classroom details. Changes reflect across all screens immediately.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveConfig} className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <div>
+              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                Grade & Section
+              </label>
+              <input
+                type="text"
+                required
+                value={gradeSectionInput}
+                onChange={(e) => setGradeSectionInput(e.target.value)}
+                placeholder="e.g. Grade 10 - St. Francis"
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-stone-50 border border-stone-300 rounded-xl text-stone-900 focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                Adviser Full Name
+              </label>
+              <input
+                type="text"
+                required
+                value={adviserNameInput}
+                onChange={(e) => setAdviserNameInput(e.target.value)}
+                placeholder="e.g. Mrs. Maria Santos"
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-stone-50 border border-stone-300 rounded-xl text-stone-900 focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                className="w-full py-2 px-4 bg-red-700 hover:bg-red-800 text-yellow-200 text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Grade & Section</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsResetPwdModalOpen(true)}
+                title="Reset Class President password"
+                className="py-2 px-3 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl border border-stone-300 transition-colors flex items-center gap-1 shrink-0"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-stone-600" />
+                <span className="hidden sm:inline">Reset Pres. Pwd</span>
+              </button>
+            </div>
+          </form>
+
+          {configSavedNotice && (
+            <div className="mt-3 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Grade & Section updated successfully!</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. LIST OF STUDENTS AND OFFICERS */}
+      <div className={`${theme.cardBg} rounded-2xl border-2 ${theme.cardBorder} p-5 ${theme.cardShadow} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
         <div>
           <div className="flex items-center gap-2">
-            <h2 className={`text-base font-bold ${theme.textPrimary}`}>Classroom Student Roster</h2>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${theme.accentBadgeBg} ${theme.accentBadgeText} border ${theme.accentBadgeBorder}`}>
+            <h2 className="text-base font-black text-stone-900">
+              Classroom Roster & Officers
+            </h2>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-yellow-100 text-yellow-900 border border-yellow-300">
               {students.length} Students
             </span>
           </div>
-          <p className={`text-xs ${theme.textMuted} mt-0.5`}>
-            Class list and historical attendance track records for {currentUser.gradeSection}.
+          <p className="text-xs text-stone-600 mt-0.5">
+            Official class master list with student officer designations for <strong>{gradeSectionInput}</strong>.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-56">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search student..."
+              placeholder="Search student or officer..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 ${theme.ringColor}`}
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-stone-300 rounded-xl text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-red-600"
             />
+            <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-2.5" />
           </div>
 
           <select
             value={genderFilter}
-            onChange={(e) => setGenderFilter(e.target.value as 'all' | 'Male' | 'Female')}
-            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-700 font-medium"
+            onChange={(e) => setGenderFilter(e.target.value as any)}
+            className="px-3 py-1.5 text-xs bg-white border border-stone-300 rounded-xl text-stone-700 font-semibold"
           >
             <option value="all">All Genders</option>
-            <option value="Male">Boys (Male)</option>
-            <option value="Female">Girls (Female)</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
           </select>
 
-          {isPresident && (
+          {isTeacher && (
             <button
               id="btn-add-student"
               type="button"
               onClick={handleOpenAdd}
-              className={`px-3.5 py-2 ${theme.primaryBtn} text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5`}
+              className="px-3.5 py-1.5 bg-red-700 hover:bg-red-800 text-yellow-200 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
             >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Student</span>
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Add Student / Officer</span>
             </button>
           )}
         </div>
       </div>
 
       {/* Roster Cards / Table */}
-      <div className={`${theme.cardBg} rounded-2xl border ${theme.cardBorder} ${theme.cardShadow} overflow-hidden`}>
+      <div className="bg-white rounded-2xl border-2 border-amber-200/90 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <th className="py-3.5 pl-6 pr-3">Student Name</th>
-                <th className="py-3.5 px-3">Gender</th>
-                <th className="py-3.5 px-3">Times Present</th>
-                <th className="py-3.5 px-3">Times Absent</th>
-                <th className="py-3.5 px-3">Attendance Rate</th>
-                <th className="py-3.5 pl-3 pr-6 text-right">Actions</th>
+              <tr className="bg-stone-50 border-b border-stone-200 text-[11px] font-black uppercase tracking-wider text-stone-500">
+                <th className="py-3 px-4 w-12 text-center">#</th>
+                <th className="py-3 px-4">Student Full Name</th>
+                <th className="py-3 px-4">Officer Designation</th>
+                <th className="py-3 px-4">Gender</th>
+                <th className="py-3 px-4">Student ID</th>
+                <th className="py-3 px-4 text-center">Attendance Track</th>
+                {isTeacher && <th className="py-3 px-4 text-right">Actions</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
-              {filteredSummaries.length === 0 ? (
+            <tbody className="divide-y divide-stone-100 text-xs text-stone-800">
+              {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-500 text-xs">
-                    No students found matching your criteria.
+                  <td colSpan={7} className="py-8 text-center text-xs text-stone-500">
+                    No students in roster. Click "+ Add Student / Officer" above to add.
                   </td>
                 </tr>
               ) : (
-                filteredSummaries.map((s) => {
-                  const studentObj = students.find((std) => std.id === s.studentId);
+                filteredStudents.map((student, idx) => {
+                  const summary = summaries.find((s) => s.studentId === student.id);
+                  const rate = summary ? summary.attendanceRate : 100;
+
                   return (
-                    <tr key={s.studentId} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3.5 pl-6 pr-3">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                              s.gender === 'Female'
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'bg-sky-100 text-sky-700'
-                            }`}
-                          >
-                            {s.name.charAt(0)}
-                          </div>
-                          <div>
+                    <tr key={student.id} className="hover:bg-stone-50 transition-colors">
+                      <td className="py-3 px-4 text-center font-mono font-bold text-stone-400">
+                        {idx + 1}
+                      </td>
+                      <td className="py-3 px-4 font-bold text-stone-900">
+                        {student.name}
+                      </td>
+                      <td className="py-3 px-4">
+                        {student.officerRole ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md">
+                            <Crown className="w-3 h-3 text-amber-600" />
+                            <span>{student.officerRole}</span>
+                          </span>
+                        ) : (
+                          <span className="text-stone-400 text-[11px] italic">Student</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-stone-600">
+                        {student.gender}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-[11px] text-stone-500">
+                        {student.studentNumber}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-black ${
+                            rate >= 90
+                              ? 'bg-emerald-100 text-emerald-900'
+                              : rate >= 75
+                              ? 'bg-yellow-100 text-yellow-900'
+                              : 'bg-red-100 text-red-900'
+                          }`}
+                        >
+                          {rate}%
+                        </span>
+                      </td>
+                      {isTeacher && (
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
-                              onClick={() => setDrilldownStudent(s)}
-                              className="font-bold text-slate-900 hover:text-emerald-600 text-left cursor-pointer"
+                              onClick={() => handleOpenEdit(student)}
+                              className="p-1.5 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition-colors"
+                              title="Edit Student"
                             >
-                              {s.name}
+                              <Edit className="w-3.5 h-3.5" />
                             </button>
-                            <span className="block text-xs font-mono text-slate-400">
-                              {s.studentNumber}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setStudentToDelete(student)}
+                              className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete Student"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        <span
-                          className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded ${
-                            s.gender === 'Female'
-                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                              : 'bg-sky-50 text-sky-700 border border-sky-200'
-                          }`}
-                        >
-                          {s.gender}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md text-xs">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          {s.presentCount}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        <span
-                          className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-md text-xs ${
-                            s.absentCount > 0
-                              ? 'text-rose-700 bg-rose-50'
-                              : 'text-slate-500 bg-slate-50'
-                          }`}
-                        >
-                          <XCircle className="w-3 h-3" />
-                          {s.absentCount}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 bg-slate-100 h-2 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${
-                                s.attendanceRate >= 90
-                                  ? 'bg-emerald-500'
-                                  : s.attendanceRate >= 75
-                                  ? 'bg-amber-500'
-                                  : 'bg-rose-500'
-                              }`}
-                              style={{ width: `${s.attendanceRate}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-bold text-slate-700">
-                            {s.attendanceRate}%
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 pl-3 pr-6 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setDrilldownStudent(s)}
-                            title="View Student Attendance Record"
-                            className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
-                          >
-                            <Clock className="w-4 h-4" />
-                          </button>
-
-                          {isPresident && studentObj && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEdit(studentObj)}
-                                title="Edit Student Info"
-                                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setStudentToDelete(studentObj)}
-                                title="Remove from Roster"
-                                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -345,18 +398,18 @@ export const RosterView: React.FC<RosterViewProps> = ({
         </div>
       </div>
 
-      {/* ADD / EDIT STUDENT MODAL */}
+      {/* ADD / EDIT STUDENT MODAL (ADVISER ONLY) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <h3 className="text-base font-bold text-slate-900">
-                {editingStudent ? 'Edit Student Details' : 'Add New Student to Class'}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl border border-stone-200">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100 mb-4">
+              <h3 className="text-base font-extrabold text-stone-900">
+                {editingStudent ? 'Edit Student & Role' : 'Add Student to Roster'}
               </h3>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="text-stone-400 hover:text-stone-600"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -364,102 +417,82 @@ export const RosterView: React.FC<RosterViewProps> = ({
 
             <form onSubmit={handleSaveStudent} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Student ID / LRN Number
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={studentForm.studentNumber}
-                  onChange={(e) => setStudentForm({ ...studentForm, studentNumber: e.target.value })}
-                  placeholder="e.g. 2026-016"
-                  className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Full Name
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                  Full Name *
                 </label>
                 <input
                   type="text"
                   required
                   value={studentForm.name}
                   onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
-                  placeholder="e.g. Sophia Castillo"
-                  className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                  placeholder="e.g. Tom Martorillas"
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Gender
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                  Officer Designation (If Officer)
                 </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <label
-                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border cursor-pointer text-xs font-bold transition-all ${
-                      studentForm.gender === 'Male'
-                        ? 'bg-sky-50 border-sky-300 text-sky-800'
-                        : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="gender"
-                      value="Male"
-                      checked={studentForm.gender === 'Male'}
-                      onChange={() => setStudentForm({ ...studentForm, gender: 'Male' })}
-                      className="sr-only"
-                    />
-                    <span>Male (Boy)</span>
-                  </label>
+                <input
+                  type="text"
+                  value={studentForm.officerRole}
+                  onChange={(e) => setStudentForm({ ...studentForm, officerRole: e.target.value })}
+                  placeholder="e.g. President, Vice President, Secretary, Treasurer, etc."
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                />
+                <span className="text-[10px] text-stone-500 mt-0.5 block">
+                  Leave empty if regular student.
+                </span>
+              </div>
 
-                  <label
-                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border cursor-pointer text-xs font-bold transition-all ${
-                      studentForm.gender === 'Female'
-                        ? 'bg-purple-50 border-purple-300 text-purple-800'
-                        : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="gender"
-                      value="Female"
-                      checked={studentForm.gender === 'Female'}
-                      onChange={() => setStudentForm({ ...studentForm, gender: 'Female' })}
-                      className="sr-only"
-                    />
-                    <span>Female (Girl)</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Gender
                   </label>
+                  <select
+                    value={studentForm.gender}
+                    onChange={(e) =>
+                      setStudentForm({ ...studentForm, gender: e.target.value as any })
+                    }
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-stone-50 border border-stone-300 rounded-xl"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Student ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={studentForm.studentNumber}
+                    onChange={(e) =>
+                      setStudentForm({ ...studentForm, studentNumber: e.target.value })
+                    }
+                    placeholder="2026-001"
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-stone-50 border border-stone-300 rounded-xl"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Email (Optional)
-                </label>
-                <input
-                  type="email"
-                  value={studentForm.email}
-                  onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-                  placeholder="e.g. sophia@school.edu"
-                  className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+              <div className="pt-4 flex items-center justify-end gap-2 border-t border-stone-100">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className={`px-5 py-2 text-xs font-bold ${theme.primaryBtn} rounded-xl`}
+                  className="px-5 py-2 text-xs font-bold bg-red-700 hover:bg-red-800 text-yellow-200 rounded-xl shadow-xs"
                 >
-                  {editingStudent ? 'Update Student' : 'Add to Roster'}
+                  {editingStudent ? 'Save Changes' : 'Add to Roster'}
                 </button>
               </div>
             </form>
@@ -467,122 +500,86 @@ export const RosterView: React.FC<RosterViewProps> = ({
         </div>
       )}
 
-      {/* STUDENT DRILLDOWN ATTENDANCE HISTORY MODAL */}
-      {drilldownStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+      {/* RESET PRESIDENT PASSWORD MODAL (ADVISER ONLY) */}
+      {isResetPwdModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl border border-stone-200">
+            <div className="flex items-center gap-2 pb-3 border-b border-stone-100 mb-4">
+              <KeyRound className="w-5 h-5 text-amber-600" />
+              <h3 className="text-base font-extrabold text-stone-900">
+                Reset President Password
+              </h3>
+            </div>
+            <p className="text-xs text-stone-600 mb-4 leading-relaxed">
+              As Teacher Adviser, you can reset the login password for the Class President encoder account (<code className="font-bold">president.santos</code>).
+            </p>
+
+            {resetSuccess && (
+              <div className="mb-4 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+                {resetSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleResetPresidentPassword} className="space-y-4">
               <div>
-                <span className="text-[11px] font-mono font-bold text-slate-500">
-                  {drilldownStudent.studentNumber}
-                </span>
-                <h3 className="text-base font-bold text-slate-900">
-                  {drilldownStudent.name}'s Attendance History
-                </h3>
+                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  New Password
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-red-600"
+                />
               </div>
-              <button
-                type="button"
-                onClick={() => setDrilldownStudent(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="p-4 bg-slate-100/60 border-b border-slate-200 grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                <span className="text-slate-500 block">Attendance Rate</span>
-                <span className="text-base font-bold text-slate-900">
-                  {drilldownStudent.attendanceRate}%
-                </span>
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setIsResetPwdModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-bold bg-red-700 hover:bg-red-800 text-yellow-200 rounded-xl"
+                >
+                  Confirm Reset
+                </button>
               </div>
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                <span className="text-emerald-600 block">Present</span>
-                <span className="text-base font-bold text-emerald-700">
-                  {drilldownStudent.presentCount}
-                </span>
-              </div>
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                <span className="text-rose-600 block">Absent</span>
-                <span className="text-base font-bold text-rose-700">
-                  {drilldownStudent.absentCount}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-4 overflow-y-auto flex-1 divide-y divide-slate-100 space-y-1">
-              {studentSessionHistory.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-400">
-                  No attendance sessions on file yet.
-                </div>
-              ) : (
-                studentSessionHistory.map((item, i) => (
-                  <div key={i} className="py-2.5 flex items-center justify-between gap-3 text-xs">
-                    <div>
-                      <span className="font-bold text-slate-800">{item.date}</span>
-                      <span className="text-slate-400 text-[11px] block">{item.sessionType}</span>
-                      {item.remarks && (
-                        <span className="text-[11px] text-slate-500 italic block">
-                          Reason: {item.remarks}
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      {item.status === 'present' ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          PRESENT
-                        </span>
-                      ) : item.status === 'absent' ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
-                          <XCircle className="w-3.5 h-3.5" />
-                          ABSENT
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">Unrecorded</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setDrilldownStudent(null)}
-                className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl"
-              >
-                Close
-              </button>
-            </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* DELETE STUDENT CONFIRMATION */}
+      {/* DELETE CONFIRMATION MODAL */}
       {studentToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl border border-slate-200">
-            <h3 className="text-base font-bold text-slate-900">Remove Student from Roster?</h3>
-            <p className="text-xs text-slate-600 mt-2">
-              Are you sure you want to remove <strong>{studentToDelete.name}</strong> ({studentToDelete.studentNumber}) from the classroom roster?
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl border border-stone-200 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center mx-auto mb-3">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h4 className="text-base font-extrabold text-stone-900">Remove Student?</h4>
+            <p className="text-xs text-stone-600 mt-1">
+              Are you sure you want to remove <strong>{studentToDelete.name}</strong> from the class roster?
             </p>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex items-center justify-center gap-2">
               <button
                 type="button"
                 onClick={() => setStudentToDelete(null)}
-                className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg"
+                className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleDeleteConfirm}
-                className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs"
+                onClick={handleDeleteStudent}
+                className="px-5 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-xs"
               >
-                Remove
+                Delete Student
               </button>
             </div>
           </div>

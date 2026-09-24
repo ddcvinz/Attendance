@@ -5,19 +5,17 @@ import { useTheme } from '../ThemeContext';
 import {
   Calendar,
   CheckCircle2,
-  XCircle,
   Search,
   Download,
-  Printer,
   Edit,
   Trash2,
   Eye,
-  FileSpreadsheet,
-  Clock,
   Crown,
-  ChevronRight,
-  ShieldCheck,
   X,
+  School,
+  GraduationCap,
+  Clock,
+  UserCheck,
 } from 'lucide-react';
 
 interface HistoryViewProps {
@@ -34,6 +32,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onSessionDeleted,
 }) => {
   const { theme } = useTheme();
+  const isTeacher = currentUser.role === 'teacher';
   const isPresident = currentUser.role === 'class_president';
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,27 +46,31 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       const matchSearch =
         s.date.includes(searchQuery) ||
         s.sessionType.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.notes.toLowerCase().includes(searchQuery.toLowerCase());
+        s.notes.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.presidentName.toLowerCase().includes(searchQuery.toLowerCase());
       return matchSearch;
     });
   }, [sessions, searchQuery]);
 
   // Handle Export CSV
   const handleExportCSV = (session: ClassAttendanceSession) => {
-    const headers = ['Student ID', 'Student Name', 'Gender', 'Status', 'Remarks'];
-    const rows = session.records.map((r) => [
-      `"${r.studentNumber}"`,
+    const headers = ['#', 'Student Full Name', 'Officer Role', 'Gender', 'Student ID', 'Status', 'Remarks'];
+    const rows = session.records.map((r, idx) => [
+      idx + 1,
       `"${r.studentName}"`,
+      `"${r.officerRole || 'Student'}"`,
       `"${r.gender}"`,
+      `"${r.studentNumber}"`,
       `"${r.status.toUpperCase()}"`,
       `"${r.remarks || ''}"`,
     ]);
 
     const meta = [
-      `"Class Attendance Sheet - ${session.gradeSection}"`,
+      `"Sto. Niño Mactan Montessori School - Classroom Attendance Sheet"`,
+      `"Grade & Section: ${session.gradeSection}"`,
       `"Date: ${session.date} | Session: ${session.sessionType}"`,
-      `"Class President: ${session.presidentName}"`,
-      `"Present: ${session.presentCount}/${session.totalStudents} (${session.attendanceRate}%) | Absent: ${session.absentCount}"`,
+      `"Class President Encoder: ${session.presidentName}"`,
+      `"Present: ${session.presentCount} | Absent: ${session.absentCount} | Late: ${session.lateCount || 0} | Half Day: ${session.halfDayCount || 0} | Rate: ${session.attendanceRate}%"`,
       '',
     ];
 
@@ -81,13 +84,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Classroom_Attendance_${session.date}_${session.sessionType.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute('download', `SNMMS_Attendance_${session.gradeSection.replace(/\s+/g, '_')}_${session.date}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Handle Delete
+  // Handle Delete (Teacher only)
   const confirmDelete = () => {
     if (!sessionToDelete) return;
     const res = deleteAttendanceSession(currentUser, sessionToDelete.id);
@@ -105,33 +108,35 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header & Search */}
-      <div className={`${theme.cardBg} rounded-2xl border ${theme.cardBorder} p-5 ${theme.cardShadow} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
+      <div className={`${theme.cardBg} rounded-2xl border-2 ${theme.cardBorder} p-5 ${theme.cardShadow} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
         <div>
-          <h2 className={`text-base font-bold ${theme.textPrimary}`}>Attendance History & Records</h2>
-          <p className={`text-xs ${theme.textMuted} mt-0.5`}>
-            Past roll call records logged by the Class President.
+          <h2 className="text-base font-extrabold text-stone-900">
+            Attendance History & Records
+          </h2>
+          <p className="text-xs text-stone-600 mt-0.5">
+            Archived roll call sessions for {currentUser.gradeSection}.
           </p>
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             type="text"
-            placeholder="Search date or type..."
+            placeholder="Search date or remarks..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className={`w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 ${theme.ringColor}`}
+            className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-stone-300 rounded-xl text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-red-600"
           />
         </div>
       </div>
 
-      {/* Sessions List */}
+      {/* Sessions Cards */}
       {filteredSessions.length === 0 ? (
-        <div className={`${theme.cardBg} rounded-2xl border ${theme.cardBorder} p-12 text-center text-slate-500`}>
-          <Calendar className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-          <h3 className={`text-sm font-bold ${theme.textPrimary}`}>No attendance sessions found</h3>
-          <p className={`text-xs ${theme.textMuted} mt-1`}>
-            {searchQuery ? 'Try changing your search keywords.' : 'The Class President has not submitted any roll calls yet.'}
+        <div className="bg-white rounded-2xl border-2 border-amber-200/90 p-12 text-center text-stone-500">
+          <Calendar className="w-10 h-10 mx-auto text-stone-300 mb-2" />
+          <h3 className="text-sm font-bold text-stone-800">No attendance sessions found</h3>
+          <p className="text-xs text-stone-500 mt-1">
+            {searchQuery ? 'Try changing your search keywords.' : 'No roll calls logged yet.'}
           </p>
         </div>
       ) : (
@@ -139,68 +144,71 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           {filteredSessions.map((session) => (
             <div
               key={session.id}
-              className={`${theme.cardBg} rounded-2xl border ${theme.cardBorder} hover:border-slate-300 p-5 ${theme.cardShadow} flex flex-col justify-between transition-all`}
+              className="bg-white rounded-2xl border-2 border-amber-200/90 p-5 shadow-xs hover:border-amber-400 transition-all flex flex-col justify-between"
             >
               <div>
-                {/* Session Header */}
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div>
-                    <div className={`flex items-center gap-1.5 text-xs font-bold ${theme.primaryText}`}>
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{session.sessionType}</span>
-                    </div>
-                    <h3 className={`text-base font-bold ${theme.textPrimary} mt-0.5`}>{session.date}</h3>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-yellow-100 text-yellow-900 border border-yellow-300 inline-block mb-1">
+                      {session.sessionType}
+                    </span>
+                    <h3 className="text-base font-extrabold text-stone-900 flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-red-700" />
+                      <span>{session.date}</span>
+                    </h3>
                   </div>
 
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      session.attendanceRate >= 90
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : session.attendanceRate >= 75
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-rose-100 text-rose-800'
-                    }`}
-                  >
+                  <span className="text-xs font-black bg-stone-100 text-stone-800 px-2 py-1 rounded-lg">
                     {session.attendanceRate}% Rate
                   </span>
                 </div>
 
-                {/* President Tag */}
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-4">
-                  <Crown className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="truncate">President: {session.presidentName}</span>
+                <div className="text-[11px] text-stone-600 mb-3 flex items-center gap-1.5">
+                  <Crown className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Marked by: <strong>{session.presidentName}</strong></span>
                 </div>
 
-                {/* Metrics Pill Grid */}
-                <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 mb-4 text-center">
+                {/* 4 Status Breakdown with circle shapes */}
+                <div className="grid grid-cols-4 gap-2 text-center p-2.5 bg-stone-50 rounded-xl border border-stone-200 mb-3 text-xs">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Total</span>
-                    <span className="text-sm font-bold text-slate-800">{session.totalStudents}</span>
+                    <span className="flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-800">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600" /> Pres.
+                    </span>
+                    <span className="font-extrabold text-stone-900">{session.presentCount}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-emerald-600 block">Present</span>
-                    <span className="text-sm font-bold text-emerald-700">{session.presentCount}</span>
+                    <span className="flex items-center justify-center gap-1 text-[10px] font-bold text-red-800">
+                      <span className="w-2 h-2 rounded-full bg-red-600" /> Abs.
+                    </span>
+                    <span className="font-extrabold text-stone-900">{session.absentCount}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-rose-600 block">Absent</span>
-                    <span className="text-sm font-bold text-rose-700">{session.absentCount}</span>
+                    <span className="flex items-center justify-center gap-1 text-[10px] font-bold text-yellow-800">
+                      <span className="w-2 h-2 rounded-full bg-yellow-500" /> Late
+                    </span>
+                    <span className="font-extrabold text-stone-900">{session.lateCount || 0}</span>
+                  </div>
+                  <div>
+                    <span className="flex items-center justify-center gap-1 text-[10px] font-bold text-orange-800">
+                      <span className="w-2 h-2 rounded-full bg-orange-500" /> Half
+                    </span>
+                    <span className="font-extrabold text-stone-900">{session.halfDayCount || 0}</span>
                   </div>
                 </div>
 
                 {session.notes && (
-                  <p className="text-xs text-slate-600 bg-slate-50/70 p-2 rounded-lg border border-slate-100 line-clamp-2 mb-4 italic">
+                  <p className="text-xs text-stone-600 bg-amber-50/50 p-2 rounded-lg border border-amber-100 line-clamp-2 mb-3 italic">
                     "{session.notes}"
                   </p>
                 )}
               </div>
 
-              {/* Action Buttons */}
-              <div className={`border-t ${theme.cardBorder} pt-3 flex items-center justify-between gap-2`}>
+              {/* Actions */}
+              <div className="border-t border-stone-100 pt-3 flex items-center justify-between gap-2">
                 <button
-                  id={`btn-view-sheet-${session.id}`}
                   type="button"
                   onClick={() => setSelectedSession(session)}
-                  className={`flex items-center gap-1 text-xs font-bold ${theme.primaryText} ${theme.primaryLightBg} hover:opacity-90 px-2.5 py-1.5 rounded-lg transition-colors`}
+                  className="flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>View Sheet</span>
@@ -210,33 +218,33 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handleExportCSV(session)}
-                    title="Export CSV Roll Sheet"
-                    className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                    title="Export CSV / Excel"
+                    className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
                   >
                     <Download className="w-4 h-4" />
                   </button>
 
-                  {/* President Edit & Delete Actions */}
-                  {isPresident && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => onEditSession(session)}
-                        title="Edit Attendance"
-                        className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
+                  {(isPresident || isTeacher) && (
+                    <button
+                      type="button"
+                      onClick={() => onEditSession(session)}
+                      title="Edit Session"
+                      className="p-1.5 text-stone-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  )}
 
-                      <button
-                        type="button"
-                        onClick={() => setSessionToDelete(session)}
-                        title="Delete Session"
-                        className="p-1.5 text-slate-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </>
+                  {/* ONLY TEACHER CAN DELETE TO PREVENT CHEATING */}
+                  {isTeacher && (
+                    <button
+                      type="button"
+                      onClick={() => setSessionToDelete(session)}
+                      title="Delete Record (Adviser Admin)"
+                      className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -245,111 +253,125 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       )}
 
-      {/* DETAIL MODAL: VIEW FULL ATTENDANCE SHEET */}
+      {/* DETAIL MODAL: FULL ATTENDANCE SHEET */}
       {selectedSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl border border-stone-200 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b border-stone-200 bg-red-900 text-white flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs font-bold px-2 py-0.5 ${theme.accentBadgeBg} ${theme.accentBadgeText} rounded-md border ${theme.accentBadgeBorder}`}>
+                  <span className="text-xs font-extrabold px-2 py-0.5 bg-yellow-400 text-red-950 rounded-md">
                     {selectedSession.sessionType}
                   </span>
-                  <span className="text-xs text-slate-500">•</span>
-                  <span className="text-xs font-bold text-slate-700">{selectedSession.date}</span>
+                  <span className="text-xs text-yellow-200">•</span>
+                  <span className="text-xs font-bold text-yellow-100">{selectedSession.date}</span>
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mt-1">
-                  Roll Call Sheet: {selectedSession.gradeSection}
+                <h3 className="text-base sm:text-lg font-black text-white mt-1">
+                  Sto. Niño Mactan Montessori School — {selectedSession.gradeSection}
                 </h3>
               </div>
 
               <button
                 type="button"
                 onClick={() => setSelectedSession(null)}
-                className="p-2 text-slate-400 hover:text-slate-700 rounded-lg"
+                className="p-1.5 text-red-200 hover:text-white rounded-lg hover:bg-red-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Attendance Meta Summary */}
-            <div className="px-6 py-3 bg-slate-100/60 border-b border-slate-200 flex flex-wrap items-center justify-between text-xs gap-3">
-              <div className="flex items-center gap-1.5 text-slate-600">
-                <Crown className="w-4 h-4 text-amber-500" />
-                <span>President: <strong>{selectedSession.presidentName}</strong></span>
+            {/* Meta bar */}
+            <div className="px-6 py-3 bg-stone-100 border-b border-stone-200 flex flex-wrap items-center justify-between text-xs gap-3 font-semibold text-stone-700">
+              <div className="flex items-center gap-1.5">
+                <Crown className="w-4 h-4 text-amber-600" />
+                <span>Encoder: <strong>{selectedSession.presidentName}</strong></span>
               </div>
 
-              <div className="flex items-center gap-4">
-                <span className="text-emerald-700 font-bold">
-                  Present: {selectedSession.presentCount}
-                </span>
-                <span className="text-rose-700 font-bold">
-                  Absent: {selectedSession.absentCount}
-                </span>
-                <span className="text-slate-800 font-bold">
-                  Rate: {selectedSession.attendanceRate}%
-                </span>
+              <div className="flex items-center gap-3">
+                <span className="text-emerald-800">Present: {selectedSession.presentCount}</span>
+                <span className="text-red-800">Absent: {selectedSession.absentCount}</span>
+                <span className="text-yellow-800">Late: {selectedSession.lateCount || 0}</span>
+                <span className="text-orange-800">Half Day: {selectedSession.halfDayCount || 0}</span>
               </div>
             </div>
 
-            {/* Students List in this session */}
-            <div className="p-6 overflow-y-auto flex-1 divide-y divide-slate-100">
+            {/* Students list */}
+            <div className="p-6 overflow-y-auto flex-1 divide-y divide-stone-100">
               {selectedSession.records.map((student, idx) => (
-                <div key={student.studentId} className="py-3 flex items-center justify-between gap-3">
+                <div key={student.studentId} className="py-2.5 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-slate-400 font-mono w-5 text-right">
+                    <span className="text-xs text-stone-400 font-mono w-5 text-right font-bold">
                       {idx + 1}.
                     </span>
+
+                    {/* Circle shape requested by user */}
+                    <span
+                      className={`w-3.5 h-3.5 rounded-full shrink-0 ${
+                        student.status === 'present'
+                          ? 'bg-emerald-600'
+                          : student.status === 'absent'
+                          ? 'bg-red-600'
+                          : student.status === 'late'
+                          ? 'bg-yellow-500'
+                          : 'bg-orange-500'
+                      }`}
+                    />
+
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900">
+                        <span className="text-sm font-bold text-stone-900">
                           {student.studentName}
                         </span>
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          ({student.studentNumber})
-                        </span>
+                        {student.officerRole && (
+                          <span className="text-xs font-black text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.2 rounded">
+                            — {student.officerRole}
+                          </span>
+                        )}
                       </div>
                       {student.remarks && (
-                        <p className="text-xs text-slate-500 italic mt-0.5">
-                          Remark: {student.remarks}
+                        <p className="text-[11px] text-stone-500 italic mt-0.5">
+                          "{student.remarks}"
                         </p>
                       )}
                     </div>
                   </div>
 
                   <div>
-                    {student.status === 'present' ? (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>PRESENT</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                        <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                        <span>ABSENT</span>
-                      </span>
-                    )}
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold ${
+                        student.status === 'present'
+                          ? 'bg-emerald-100 text-emerald-900'
+                          : student.status === 'absent'
+                          ? 'bg-red-100 text-red-900'
+                          : student.status === 'late'
+                          ? 'bg-yellow-100 text-yellow-900'
+                          : 'bg-orange-100 text-orange-900'
+                      }`}
+                    >
+                      {student.status === 'present' && 'Present'}
+                      {student.status === 'absent' && 'Absent'}
+                      {student.status === 'late' && 'Late'}
+                      {student.status === 'half_day' && 'Half Day nisud'}
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+            <div className="p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => handleExportCSV(selectedSession)}
-                className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 shadow-2xs flex items-center gap-2"
+                className="px-4 py-2 text-xs font-bold bg-white hover:bg-stone-100 text-stone-700 border border-stone-300 rounded-xl transition-colors flex items-center gap-1.5"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
                 <span>Export CSV</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSelectedSession(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs"
+                className="px-4 py-2 text-xs font-bold bg-stone-900 hover:bg-stone-800 text-white rounded-xl transition-colors"
               >
                 Close
               </button>
@@ -358,37 +380,37 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       )}
 
-      {/* DELETE CONFIRMATION MODAL */}
+      {/* DELETE CONFIRMATION MODAL (ADVISER ONLY) */}
       {sessionToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl border border-slate-200">
-            <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl border border-stone-200 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center mx-auto mb-3">
               <Trash2 className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Delete Attendance Session?</h3>
-            <p className="text-xs text-slate-600 mt-1">
-              Are you sure you want to delete the attendance roll sheet for{' '}
-              <strong>{sessionToDelete.date}</strong> ({sessionToDelete.sessionType})? This action cannot be undone.
+            <h4 className="text-base font-extrabold text-stone-900">Delete Record?</h4>
+            <p className="text-xs text-stone-600 mt-1">
+              Delete the attendance sheet for <strong>{sessionToDelete.date}</strong> ({sessionToDelete.sessionType})?
             </p>
-
             {deleteError && (
-              <p className="text-xs text-rose-600 font-semibold mt-2">{deleteError}</p>
+              <p className="text-xs text-red-600 font-bold mt-2">{deleteError}</p>
             )}
-
-            <div className="mt-6 flex items-center justify-end gap-3">
+            <div className="mt-5 flex items-center justify-center gap-2">
               <button
                 type="button"
-                onClick={() => setSessionToDelete(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                onClick={() => {
+                  setSessionToDelete(null);
+                  setDeleteError(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmDelete}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors shadow-xs"
+                className="px-5 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-xs"
               >
-                Delete Record
+                Confirm Delete
               </button>
             </div>
           </div>

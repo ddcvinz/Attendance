@@ -1,5 +1,5 @@
 import React from 'react';
-import { User } from '../types';
+import { User, AdviserNotification } from '../types';
 import { useTheme } from '../ThemeContext';
 import { ThemeSelector } from './ThemeSelector';
 import {
@@ -8,58 +8,71 @@ import {
   Users,
   LogOut,
   Crown,
-  User as UserIcon,
-  ShieldCheck,
+  GraduationCap,
+  Eye,
+  Bell,
   School,
   ArrowRightLeft,
 } from 'lucide-react';
 
 interface NavbarProps {
   currentUser: User | null;
+  gradeSection: string;
   activeTab: 'rollcall' | 'history' | 'roster';
+  notifications: AdviserNotification[];
   onSelectTab: (tab: 'rollcall' | 'history' | 'roster') => void;
   onLogout: () => void;
   onSwitchRole: () => void;
+  onOpenNotifications?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
+  gradeSection,
   activeTab,
+  notifications,
   onSelectTab,
   onLogout,
   onSwitchRole,
+  onOpenNotifications,
 }) => {
   const { theme } = useTheme();
+  const isTeacher = currentUser?.role === 'teacher';
   const isPresident = currentUser?.role === 'class_president';
+  const isStudent = currentUser?.role === 'student';
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <header className={`sticky top-0 z-30 ${theme.headerBg} border-b ${theme.headerBorder} shadow-sm transition-colors duration-200`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-4">
-          {/* Logo & Section Branding */}
+        <div className="flex items-center justify-between h-16 gap-3">
+          
+          {/* UPPER-LEFT: SCHOOL + GRADE & SECTION */}
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl ${theme.brandIconBg} ${theme.brandIconText} flex items-center justify-center shadow-sm font-bold shrink-0`}>
-              <ClipboardCheck className="w-6 h-6" />
+            <div className={`w-10 h-10 rounded-xl ${theme.brandIconBg} ${theme.brandIconText} flex items-center justify-center shadow-xs font-bold shrink-0 border border-yellow-300`}>
+              <School className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold tracking-tight">
-                  Classroom Attendance
-                </h1>
-                <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${theme.accentBadgeBg} ${theme.accentBadgeText} border ${theme.accentBadgeBorder}`}>
-                  <School className="w-3 h-3 mr-1" />
-                  {currentUser?.gradeSection || 'Grade 10 - Diamond'}
+                <span className="text-xs font-bold text-yellow-300 tracking-wide uppercase">
+                  Sto. Niño Mactan Montessori School
                 </span>
               </div>
-              <p className="text-[11px] opacity-75 hidden sm:block">
-                Official Daily Roll Call Management System
-              </p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg font-black tracking-tight text-white">
+                  {gradeSection || 'Grade 10 - St. Francis'}
+                </h1>
+                <span className="text-[10px] uppercase font-bold bg-yellow-400/20 text-yellow-300 px-2 py-0.2 rounded border border-yellow-400/40 hidden sm:inline-block">
+                  Classroom Attendance
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* NAVIGATION TABS (Roll Call, History, Student Roster) */}
           {currentUser && (
-            <nav className="flex items-center bg-black/15 p-1 rounded-xl gap-1">
+            <nav className="hidden md:flex items-center bg-black/20 p-1 rounded-xl gap-1">
               <button
                 id="tab-rollcall"
                 type="button"
@@ -72,10 +85,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <ClipboardCheck className="w-4 h-4" />
                 <span>Roll Call</span>
-                {isPresident ? (
-                  <span className="ml-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse hidden sm:inline-block" />
-                ) : (
-                  <span className="ml-1 text-[10px] bg-white/20 text-current px-1.5 py-0.2 rounded font-medium">View</span>
+                {isPresident && (
+                  <span className="ml-1 text-[10px] bg-amber-400 text-stone-950 font-bold px-1.5 py-0.2 rounded">
+                    Encoder
+                  </span>
                 )}
               </button>
 
@@ -104,76 +117,136 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }`}
               >
                 <Users className="w-4 h-4" />
-                <span>Students</span>
+                <span>Students & Officers</span>
+                {isTeacher && (
+                  <span className="ml-1 text-[10px] bg-yellow-400 text-stone-950 font-bold px-1.5 py-0.2 rounded">
+                    Manage
+                  </span>
+                )}
               </button>
             </nav>
           )}
 
-          {/* User Profile & Actions */}
-          <div className="flex items-center gap-2">
-            {/* Theme Selector Button */}
+          {/* UPPER-RIGHT: USER IDENTIFIER (Adviser, President, or Student #random) */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Adviser Notifications Bell */}
+            {isTeacher && (
+              <button
+                id="btn-adviser-notifs"
+                type="button"
+                onClick={onOpenNotifications}
+                className="relative p-2 rounded-xl bg-white/10 hover:bg-white/20 text-yellow-300 transition-colors"
+                title="Adviser Notifications"
+              >
+                <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 text-red-950 font-bold text-[10px] rounded-full flex items-center justify-center animate-bounce shadow-xs">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Theme Selector */}
             <ThemeSelector />
 
-            {currentUser ? (
+            {currentUser && (
               <>
-                {/* Role badge */}
-                <div
-                  className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border ${
-                    isPresident
-                      ? `${theme.presidentBadgeBg} ${theme.presidentBadgeBorder} ${theme.presidentBadgeText}`
-                      : 'bg-white/10 border-white/20 text-white'
-                  }`}
-                >
+                {/* User indicator: Adviser, President, or Student #number */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-black/25 border-white/20 text-white">
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                      isPresident ? 'bg-amber-400 text-slate-900' : 'bg-blue-500 text-white'
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      isTeacher
+                        ? 'bg-yellow-400 text-red-950'
+                        : isPresident
+                        ? 'bg-amber-400 text-stone-950'
+                        : 'bg-stone-200 text-stone-900'
                     }`}
                   >
-                    {isPresident ? <Crown className="w-3.5 h-3.5" /> : <UserIcon className="w-3.5 h-3.5" />}
+                    {isTeacher ? (
+                      <GraduationCap className="w-3.5 h-3.5" />
+                    ) : isPresident ? (
+                      <Crown className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
                   </div>
                   <div className="text-left">
-                    <div className="flex items-center gap-1 leading-none">
-                      <span className="text-xs font-bold">
-                        {currentUser.name}
-                      </span>
-                      {isPresident && (
-                        <span title="Authorized Attendance Officer">
-                          <ShieldCheck className="w-3.5 h-3.5 text-amber-400 inline" />
-                        </span>
-                      )}
+                    <div className="text-xs font-bold leading-tight">
+                      {isTeacher && `Adviser: ${currentUser.name}`}
+                      {isPresident && `President: ${currentUser.name}`}
+                      {isStudent && `${currentUser.name} (View-Only)`}
                     </div>
-                    <span className="text-[10px] font-medium opacity-80">
-                      {isPresident ? 'Class President' : 'Student'}
-                    </span>
+                    <div className="text-[10px] text-yellow-200/80">
+                      {isTeacher && 'Master Admin'}
+                      {isPresident && 'Authorized Encoder'}
+                      {isStudent && 'Public Live Display'}
+                    </div>
                   </div>
                 </div>
 
-                {/* Quick switch role button for testing */}
+                {/* Role switcher button */}
                 <button
                   id="btn-switch-role"
                   type="button"
                   onClick={onSwitchRole}
-                  title={isPresident ? 'Switch to Student View' : 'Switch to Class President'}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-colors"
+                  title="Switch Role"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 text-white transition-colors"
                 >
                   <ArrowRightLeft className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Switch Role</span>
+                  <span className="hidden sm:inline">Switch</span>
                 </button>
 
-                {/* Logout button */}
+                {/* Log Out / Exit View */}
                 <button
                   id="btn-logout"
                   type="button"
                   onClick={onLogout}
-                  className="p-2 opacity-80 hover:opacity-100 hover:bg-rose-500/20 hover:text-rose-300 rounded-lg transition-colors"
-                  title="Log Out"
+                  className="p-2 opacity-80 hover:opacity-100 hover:bg-rose-500/20 hover:text-rose-200 rounded-xl transition-colors text-white"
+                  title={isStudent ? 'Exit Student View' : 'Sign Out'}
                 >
                   <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </>
-            ) : null}
+            )}
           </div>
         </div>
+
+        {/* Mobile Navigation Tabs */}
+        {currentUser && (
+          <div className="md:hidden flex items-center justify-around py-2 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() => onSelectTab('rollcall')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold ${
+                activeTab === 'rollcall' ? theme.navActiveBg : theme.navInactiveText
+              }`}
+            >
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              <span>Roll Call</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectTab('history')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold ${
+                activeTab === 'history' ? theme.navActiveBg : theme.navInactiveText
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>History</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectTab('roster')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold ${
+                activeTab === 'roster' ? theme.navActiveBg : theme.navInactiveText
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Students</span>
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

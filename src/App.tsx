@@ -6,8 +6,12 @@ import {
   getAllStudents,
   getAllAttendanceSessions,
   getAllUsers,
+  getClassroomConfig,
+  getAdviserNotifications,
+  markAllNotificationsAsRead,
+  createStudentViewerSession,
 } from './storage';
-import { User, Student, ClassAttendanceSession } from './types';
+import { User, Student, ClassAttendanceSession, AdviserNotification, ClassroomConfig } from './types';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { Navbar } from './components/Navbar';
 import { RollCallView } from './components/RollCallView';
@@ -18,9 +22,14 @@ import {
   CheckCircle2,
   AlertCircle,
   Crown,
-  User as UserIcon,
+  GraduationCap,
+  Eye,
   ShieldAlert,
   ArrowRightLeft,
+  Bell,
+  X,
+  Check,
+  Calendar,
 } from 'lucide-react';
 
 function ClassroomAttendanceApp() {
@@ -28,13 +37,18 @@ function ClassroomAttendanceApp() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<'rollcall' | 'history' | 'roster'>('rollcall');
 
+  // Classroom Config
+  const [config, setConfig] = useState<ClassroomConfig>(getClassroomConfig());
+
   // Data states
   const [students, setStudents] = useState<Student[]>([]);
   const [sessions, setSessions] = useState<ClassAttendanceSession[]>([]);
   const [editingSession, setEditingSession] = useState<ClassAttendanceSession | null>(null);
+  const [notifications, setNotifications] = useState<AdviserNotification[]>([]);
 
-  // Switch role modal
+  // Modals
   const [isRoleSwitchModalOpen, setIsRoleSwitchModalOpen] = useState(false);
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(
@@ -46,21 +60,20 @@ function ClassroomAttendanceApp() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
-  // Load active session on mount
+  // Refresh all state
+  const loadData = useCallback(() => {
+    setConfig(getClassroomConfig());
+    setStudents(getAllStudents());
+    setSessions(getAllAttendanceSessions());
+    setNotifications(getAdviserNotifications());
+  }, []);
+
+  // Load session on mount
   useEffect(() => {
     const session = getCurrentSession();
     if (session) {
       setCurrentUser(session);
     }
-  }, []);
-
-  // Refresh all state
-  const loadData = useCallback(() => {
-    setStudents(getAllStudents());
-    setSessions(getAllAttendanceSessions());
-  }, []);
-
-  useEffect(() => {
     loadData();
   }, [loadData]);
 
@@ -68,18 +81,31 @@ function ClassroomAttendanceApp() {
     logoutUser();
     setCurrentUser(null);
     setEditingSession(null);
-    showToast('You have signed out.', 'info');
+    showToast('Signed out of the system.', 'info');
   };
 
   const handleAuthSuccess = () => {
     const session = getCurrentSession();
     setCurrentUser(session);
     loadData();
-    showToast(`Welcome back, ${session?.name}!`, 'success');
+    if (session?.role === 'student') {
+      showToast(`Viewing as ${session.name} (View-Only Mode)`, 'info');
+    } else {
+      showToast(`Welcome back, ${session?.name}!`, 'success');
+    }
   };
 
-  // Switch to another account/role
-  const handleSwitchAccount = (targetRole: 'class_president' | 'student') => {
+  // Switch role directly
+  const handleSwitchAccount = (targetRole: 'teacher' | 'class_president' | 'student') => {
+    if (targetRole === 'student') {
+      const viewer = createStudentViewerSession();
+      setCurrentUser(viewer);
+      setIsRoleSwitchModalOpen(false);
+      setEditingSession(null);
+      showToast('Switched to Student Public View (Read-Only)', 'info');
+      return;
+    }
+
     const users = getAllUsers();
     const target = users.find((u) => u.role === targetRole);
     if (target) {
@@ -89,16 +115,22 @@ function ClassroomAttendanceApp() {
       setIsRoleSwitchModalOpen(false);
       setEditingSession(null);
       showToast(
-        `Switched to ${safe.role === 'class_president' ? 'Class President' : 'Student'} (${safe.name})`,
+        `Switched to ${safe.role === 'teacher' ? 'Teacher Adviser' : 'Class President'} (${safe.name})`,
         'success'
       );
     }
   };
 
-  // When president clicks edit on a history card
+  // Edit session from history
   const handleEditSessionFromHistory = (session: ClassAttendanceSession) => {
     setEditingSession(session);
     setActiveTab('rollcall');
+  };
+
+  // Clear or mark all notifications as read
+  const handleMarkNotifsRead = () => {
+    markAllNotificationsAsRead();
+    setNotifications(getAdviserNotifications());
   };
 
   return (
@@ -106,7 +138,9 @@ function ClassroomAttendanceApp() {
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
+        gradeSection={config.gradeSection}
         activeTab={activeTab}
+        notifications={notifications}
         onSelectTab={(tab) => {
           setActiveTab(tab);
           if (tab !== 'rollcall') {
@@ -115,6 +149,7 @@ function ClassroomAttendanceApp() {
         }}
         onLogout={handleLogout}
         onSwitchRole={() => setIsRoleSwitchModalOpen(true)}
+        onOpenNotifications={() => setIsNotifModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -132,7 +167,7 @@ function ClassroomAttendanceApp() {
                 onSessionSaved={() => {
                   loadData();
                   setEditingSession(null);
-                  showToast('Classroom attendance saved successfully!', 'success');
+                  showToast('Attendance record saved & logged successfully!', 'success');
                 }}
                 onCancelEdit={() => setEditingSession(null)}
                 onSwitchRole={() => setIsRoleSwitchModalOpen(true)}
@@ -146,7 +181,7 @@ function ClassroomAttendanceApp() {
                 onEditSession={handleEditSessionFromHistory}
                 onSessionDeleted={() => {
                   loadData();
-                  showToast('Attendance record deleted.', 'info');
+                  showToast('Attendance record deleted by Adviser.', 'info');
                 }}
               />
             )}
@@ -158,7 +193,11 @@ function ClassroomAttendanceApp() {
                 sessions={sessions}
                 onRosterChanged={() => {
                   loadData();
-                  showToast('Classroom student roster updated.', 'success');
+                  showToast('Classroom roster updated.', 'success');
+                }}
+                onConfigChanged={() => {
+                  loadData();
+                  showToast('Grade & Section updated.', 'success');
                 }}
               />
             )}
@@ -166,43 +205,160 @@ function ClassroomAttendanceApp() {
         )}
       </main>
 
-      {/* ROLE SWITCHER MODAL */}
+      {/* ADVISER NOTIFICATIONS MODAL */}
+      {isNotifModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-stone-200 overflow-hidden">
+            <div className="p-4 bg-red-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-yellow-300" />
+                <h3 className="text-base font-extrabold text-white">
+                  Adviser Attendance Alerts
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNotifModalOpen(false)}
+                className="p-1 text-red-200 hover:text-white rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-stone-50 border-b border-stone-200 flex items-center justify-between text-xs font-semibold text-stone-600">
+              <span>Automatic alerts triggered when President submits attendance</span>
+              {notifications.some((n) => !n.read) && (
+                <button
+                  type="button"
+                  onClick={handleMarkNotifsRead}
+                  className="text-red-700 hover:text-red-900 font-bold flex items-center gap-1"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Mark all read</span>
+                </button>
+              )}
+            </div>
+
+            <div className="p-4 max-h-80 overflow-y-auto divide-y divide-stone-100 space-y-2">
+              {notifications.length === 0 ? (
+                <div className="py-8 text-center text-xs text-stone-400">
+                  No attendance notifications recorded yet.
+                </div>
+              ) : (
+                notifications.map((notif) => (
+                  <div
+                    key={notif.id}
+                    className={`pt-2 pb-3 px-3 rounded-xl border transition-colors ${
+                      notif.read ? 'bg-white border-stone-100' : 'bg-yellow-50/70 border-yellow-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                        <Crown className="w-3.5 h-3.5 text-amber-600" />
+                        <span>{notif.presidentName} (President)</span>
+                      </span>
+                      <span className="text-[10px] font-mono text-stone-500">
+                        {notif.date} • {notif.time}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-stone-700 leading-relaxed">
+                      {notif.message}
+                    </p>
+
+                    <div className="mt-2 flex items-center gap-3 text-[11px] font-bold">
+                      <span className="text-emerald-800">Present: {notif.presentCount}</span>
+                      <span className="text-red-800">Absent: {notif.absentCount}</span>
+                      <span className="text-yellow-800">Late: {notif.lateCount}</span>
+                      <span className="text-orange-800">Half Day: {notif.halfDayCount}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="p-3 bg-stone-50 border-t border-stone-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsNotifModalOpen(false)}
+                className="px-4 py-1.5 text-xs font-bold bg-stone-900 hover:bg-stone-800 text-white rounded-xl"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ROLE SWITCHER MODAL (FRONT PAGE ROLES: TEACHER | PRESIDENT | STUDENT) */}
       {isRoleSwitchModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className={`${theme.cardBg} w-full max-w-md rounded-2xl p-6 shadow-xl border ${theme.cardBorder}`}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl border border-stone-200">
             <div className="flex items-center gap-2.5 mb-2">
-              <div className={`w-8 h-8 rounded-lg ${theme.primaryLightBg} ${theme.primaryText} flex items-center justify-center`}>
+              <div className="w-8 h-8 rounded-lg bg-red-800 text-yellow-300 flex items-center justify-center">
                 <ArrowRightLeft className="w-4 h-4" />
               </div>
-              <h3 className={`text-base font-bold ${theme.textPrimary}`}>Switch User Account / Role</h3>
+              <h3 className="text-base font-extrabold text-stone-900">Switch Role</h3>
             </div>
-            <p className={`text-xs ${theme.textMuted} mb-5`}>
-              Test how the application enforces role permissions between the authorized <strong>Class President</strong> and regular <strong>Students</strong>.
+            <p className="text-xs text-stone-600 mb-5">
+              Select one of the 3 roles for Sto. Niño Mactan Montessori School:
             </p>
 
             <div className="space-y-3">
+              {/* 1. TEACHER ADVISER */}
+              <button
+                type="button"
+                onClick={() => handleSwitchAccount('teacher')}
+                className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                  currentUser?.role === 'teacher'
+                    ? 'border-red-600 bg-red-50/70 ring-1 ring-red-600'
+                    : 'border-stone-200 hover:border-red-400 hover:bg-stone-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-800 text-yellow-300 flex items-center justify-center font-bold">
+                    <GraduationCap className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-stone-900">Mrs. Maria Santos</span>
+                      <span className="text-[10px] font-bold bg-red-100 text-red-900 px-1.5 py-0.2 rounded border border-red-200">
+                        Teacher Adviser
+                      </span>
+                    </div>
+                    <span className="text-xs text-stone-600 block">
+                      Admin: Configures Grade & Section, manages roster, receives alerts
+                    </span>
+                  </div>
+                </div>
+                {currentUser?.role === 'teacher' && (
+                  <span className="text-xs font-bold text-red-700">Active</span>
+                )}
+              </button>
+
+              {/* 2. CLASS PRESIDENT */}
               <button
                 type="button"
                 onClick={() => handleSwitchAccount('class_president')}
                 className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
                   currentUser?.role === 'class_president'
                     ? 'border-amber-500 bg-amber-50/70 ring-1 ring-amber-500'
-                    : `border-slate-200 hover:border-amber-300 hover:bg-slate-50`
+                    : 'border-stone-200 hover:border-amber-400 hover:bg-stone-50'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center font-bold">
                     <Crown className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-bold text-slate-900">Jovin Anunciado</span>
+                      <span className="text-sm font-bold text-stone-900">Tom Martorillas</span>
                       <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded border border-amber-200">
                         Class President
                       </span>
                     </div>
-                    <span className="text-xs text-amber-700 block">
-                      ✓ Can take roll call & mark Present/Absent
+                    <span className="text-xs text-stone-600 block">
+                      Encoder: Marks Present, Absent, Late, Half Day
                     </span>
                   </div>
                 </div>
@@ -211,33 +367,34 @@ function ClassroomAttendanceApp() {
                 )}
               </button>
 
+              {/* 3. STUDENT VIEW ONLY */}
               <button
                 type="button"
                 onClick={() => handleSwitchAccount('student')}
                 className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
                   currentUser?.role === 'student'
-                    ? 'border-blue-500 bg-blue-50/70 ring-1 ring-blue-500'
-                    : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                    ? 'border-stone-600 bg-stone-100 ring-1 ring-stone-600'
+                    : 'border-stone-200 hover:border-stone-400 hover:bg-stone-50'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
-                    <UserIcon className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-xl bg-stone-800 text-white flex items-center justify-center font-bold">
+                    <Eye className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-bold text-slate-900">Liam Santos</span>
-                      <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
-                        Student
+                      <span className="text-sm font-bold text-stone-900">Student Public View</span>
+                      <span className="text-[10px] font-bold bg-stone-200 text-stone-800 px-1.5 py-0.2 rounded">
+                        No Login
                       </span>
                     </div>
-                    <span className="text-xs text-slate-500 block">
-                      Read-only personal attendance access
+                    <span className="text-xs text-stone-600 block">
+                      Read-only "Who is absent today?" classroom TV display
                     </span>
                   </div>
                 </div>
                 {currentUser?.role === 'student' && (
-                  <span className="text-xs font-bold text-blue-700">Active</span>
+                  <span className="text-xs font-bold text-stone-700">Active</span>
                 )}
               </button>
             </div>
@@ -246,7 +403,7 @@ function ClassroomAttendanceApp() {
               <button
                 type="button"
                 onClick={() => setIsRoleSwitchModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl"
               >
                 Close
               </button>
@@ -257,13 +414,13 @@ function ClassroomAttendanceApp() {
 
       {/* Global Toast Notification */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium bg-white border-slate-200 text-slate-800 animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium bg-white border-stone-200 text-stone-800 animate-in fade-in slide-in-from-bottom-2">
           {toast.type === 'success' ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           ) : toast.type === 'error' ? (
             <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
           ) : (
-            <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           )}
           <span>{toast.message}</span>
         </div>
